@@ -1,45 +1,53 @@
-# AK35i V3 Max 控制中心（macOS）
+# AK35i Control Center for macOS
 
-这是一个原生 macOS 控制中心和 CLI，不安装内核驱动。当前版本只会向键盘写入已经在真机验证过的屏幕时钟报文。
+[![CI](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/actions/workflows/ci.yml/badge.svg)](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Ike-li/ak35i-v3-max-macos-control-center?display_name=tag&include_prereleases&sort=semver)](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases)
+[![License](https://img.shields.io/github/license/Ike-li/ak35i-v3-max-macos-control-center)](LICENSE)
 
-> 本项目是独立的社区工具，与 AJAZZ 没有隶属、授权或合作关系；不包含、分发或复用任何厂商驱动、固件、图片、GIF 或源码。
+[English](README.en.md) · [下载](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [快速上手](docs/GETTING_STARTED.md) · [故障排查](docs/TROUBLESHOOTING.md) · [功能状态](docs/PROTOCOL_STATUS.md)
 
-## 使用
+面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前只允许向已实机验证的 USB HID 时钟通道写入时间；所有其他私有协议功能默认锁定。
 
-- 双击 `dist/AK35i Control Center.app` 打开图形界面。
-- 命令行程序位于 `dist/ak35i`，或 `dist/AK35i Control Center.app/Contents/MacOS/ak35i`。
-- 若 macOS 首次阻止未公证的本地应用，在 Finder 中按住 Control 点击应用并选择“打开”一次；正式分发前需 Developer ID 签名和公证。
+> Independent community project. It is not affiliated with, endorsed by, or supported by AJAZZ. See [NOTICE.md](NOTICE.md).
 
-```zsh
-APP="./dist/ak35i"
+## 先看这里
 
-"$APP" status
-"$APP" time sync --utc8 --apply
-"$APP" preview time --utc8
-"$APP" autosync status
-"$APP" autosync enable --utc8
-"$APP" autosync disable
-```
+| 项目 | 当前状态 |
+|---|---|
+| 已验证硬件 | USB VID:PID `0C45:8009` 的 AK35i V3 Max |
+| 已验证写入 | 屏幕时钟：UTC+8 或 Mac 当前时区 |
+| 连接要求 | USB 有线模式；蓝牙与 2.4G 不提供控制承诺 |
+| 支持系统 | 当前发布包为 Apple Silicon (`arm64`)、macOS 13+ |
+| 未开放写入 | RGB、图片/GIF、改键、宏、电量读取 |
+| 网络与隐私 | 无账号、遥测或上传；不显示、保存或写入设备序列号 |
 
-自动校时仅在显式启用后创建当前用户的 LaunchAgent；登录时与每 24 小时尝试一次。键盘不在 USB 模式时不会写入。
+## 下载并同步时间
+
+1. 从 [Releases](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) 下载最新的 `arm64.dmg` 与同名 `.sha256` 校验文件。
+2. 确认键盘通过数据线连接，且已切到 USB 模式。
+3. 打开 DMG，将 **AK35i Control Center** 拖到“应用程序”。首次若被 Gatekeeper 阻止，按住 Control 点击应用并选择“打开”。
+4. 在控制中心的“时钟”页选择 `UTC+08:00（北京时间）` 或 Mac 当前时区，点击“立即同步”。
+
+完整步骤、校验命令与 CLI 用法见 [快速上手](docs/GETTING_STARTED.md)。
+
+## 为什么功能没有全开？
+
+屏幕时钟已经经过真机验证。RGB、屏幕图片/GIF、板载改键、宏和电量读取尚未取得每个功能的“操作 → 报文 → 应答 → 重连持久化”完整证据，因此程序不会猜测 opcode 或盲发写入。
+
+这是刻意的安全边界，不是界面遗漏。详见 [功能与协议状态](docs/PROTOCOL_STATUS.md) 与 [安全模型](docs/SAFETY_MODEL.md)。
 
 ## 从源码构建
 
-```zsh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --disable-sandbox
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build -c release --disable-sandbox
-```
-
-源代码位于 `Sources/`，打包用的应用信息在 `Packaging/Info.plist`。`dist/` 保存当前构建的交付物，不纳入 Git。
-
-生成可双击打开的应用：
+需要 Xcode/Swift 6 与 macOS 13+：
 
 ```zsh
+git clone https://github.com/Ike-li/ak35i-v3-max-macos-control-center.git
+cd ak35i-v3-max-macos-control-center
+
+swift test --disable-sandbox
 ./Packaging/build-app.sh
 open "dist/AK35i Control Center.app"
 ```
-
-打包脚本会从 Release 构建生成新的应用包、清理会破坏签名的 Finder 元数据、ad-hoc 签名并校验。若已有旧版本，会移动为带时间戳的备份而非删除。
 
 创建本地 DMG：
 
@@ -47,32 +55,24 @@ open "dist/AK35i Control Center.app"
 ./Packaging/create-dmg.sh
 ```
 
-当前 DMG 是本地 ad-hoc 签名构建，尚未经过 Apple Developer ID 签名或公证；首次运行可能需要在 Finder 中按住 Control 点击应用并选择“打开”。
+本地构建与当前预览发布均为 ad-hoc 签名，尚未 Apple 公证。正式稳定分发前仍需 Developer ID 签名与公证。
 
-## 兼容性与隐私
+## 文档导航
 
-- 当前发布构建为 Apple Silicon (`arm64`)，需要 macOS 13 或更高版本；键盘须以 USB 有线模式连接。
-- 已实机验证的设备为 USB VID:PID `0C45:8009`。屏幕 GIF、RGB、板载改键、宏和电量读取仍不会写入设备。
-- 应用不实现网络上传、遥测或账号登录，也不会显示、保存或写入设备序列号。
-- 自动校时仅在显式启用后创建当前用户的 LaunchAgent；日志仅保存在当前用户的 `~/Library/Logs/`。
+| 你想做什么 | 文档 |
+|---|---|
+| 首次安装、同步时间或使用 CLI | [快速上手](docs/GETTING_STARTED.md) |
+| 处理 Gatekeeper、找不到设备等问题 | [故障排查](docs/TROUBLESHOOTING.md) |
+| 了解已验证与锁定功能 | [功能与协议状态](docs/PROTOCOL_STATUS.md) |
+| 理解为何不猜测私有 HID 命令 | [安全模型](docs/SAFETY_MODEL.md) |
+| 参与开发或提交抓包证据 | [贡献指南](CONTRIBUTING.md) |
+| 维护发布包 | [发布流程](docs/RELEASING.md) |
+| 驱动来源、抓包工作单、静态逆向记录 | [技术文档](docs/) |
 
-## 发布者检查单
+## 参与贡献
 
-公开发布前，请勿使用 `git add -f` 以绕过 `.gitignore`。该规则特意排除了本机构建产物、厂商驱动和静态逆向载荷。
+欢迎提交 bug、文档和可复现的抓包证据。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。请勿在 issue、日志、截图或抓包中公开设备序列号、私人图片或未脱敏的个人路径。
 
-正式面向其他用户分发前，建议以 Apple Developer ID 签名并完成公证；公开仓库提供的是可复现源码与本地 DMG 打包脚本，不承诺绕过 Gatekeeper。
+## 许可与声明
 
-## 当前已验证
-
-- USB 有线设备识别：VID:PID `0C45:8009`。
-- 64 字节 Feature 控制通道：usage `0xFF13:0x0001`。
-- 4 KiB 屏幕数据通道：usage `0xFF68:0x0061`。
-- UTC+8 或 Mac 当前时区的屏幕时钟同步。
-
-## 安全锁定的功能
-
-电量、RGB、GIF/图片、板载改键和宏尚未有 AK35I V3 Max 的 Windows 抓包证据，因此控制中心只显示状态，不会写入。`backup` 和 `restore` 不会伪造成功；例如屏幕内容无法从硬件读出前，不允许声称已备份。
-
-正确的 Windows 驱动归档已从 AJAZZ 官方站点留存并做过完整性校验；其来源、哈希与已知边界见 [驱动溯源记录](docs/DRIVER_PROVENANCE.md)。下一阶段请按 [抓包工作单](docs/CAPTURE_WORKSHEET.md) 在实体 Windows 上录制该 V3 Max 驱动的 USB 报文。
-
-Windows 归档的离线静态逆向记录见 [静态逆向记录](docs/STATIC_REVERSING.md)。它用于缩小协议探索范围，但不会绕过每项功能的真机抓包验证。
+代码以 [MIT License](LICENSE) 发布。型号、商标和第三方材料边界见 [NOTICE.md](NOTICE.md)。本仓库不包含、分发或修改厂商 Windows 驱动、固件、图片、GIF 或源码。

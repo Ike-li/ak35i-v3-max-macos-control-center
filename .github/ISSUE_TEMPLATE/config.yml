@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security and privacy reports
+    url: https://github.com/Ike-li/ak35i-v3-max-macos-control-center/security/advisories/new
+    about: Use a private security advisory for sensitive reports.

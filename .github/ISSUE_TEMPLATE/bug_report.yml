@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a reproducible problem with device discovery, clock sync, or packaging.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include a device serial number, private image/GIF, personal path, token, or unredacted USB capture.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: v0.1.0-preview
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac architecture
+      placeholder: macOS 15.x, Apple Silicon
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Keyboard and connection mode
+      placeholder: AK35i V3 Max, USB wired, VID:PID 0C45:8009
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. Connect by USB\n2. Open Overview\n3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or error code
+      description: Remove serial numbers and personal paths first.

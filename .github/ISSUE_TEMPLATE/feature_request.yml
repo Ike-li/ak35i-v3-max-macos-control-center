@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a user-facing improvement or submit evidence for a safely locked feature.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Unknown HID writes are intentionally locked. Do not request opcode guessing or firmware-update support.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence, if this requires a new device command
+      description: Describe the reproducible, redacted action-to-packet-to-persistence evidence. Do not attach vendor binaries or private captures.
