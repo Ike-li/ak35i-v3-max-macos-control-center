@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-14
+    # Swift tools 6.0 requires Xcode 16 or newer. macos-14 currently defaults
+    # to Xcode 15.4, while macos-15 provides a Swift 6 toolchain.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
