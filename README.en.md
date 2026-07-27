@@ -1,6 +1,6 @@
 # AK35i Control Center for macOS
 
-[中文](README.md) · [Download](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [Getting started](docs/GETTING_STARTED.md) · [Protocol status](docs/PROTOCOL_STATUS.md)
+[中文](README.md) · [Download](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [Getting started](docs/GETTING_STARTED.md) · [Chinese and English manuals](docs/manuals/) · [Protocol status](docs/PROTOCOL_STATUS.md)
 
 A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes that have been verified on the physical device; all unknown vendor-HID writes remain locked.
 
@@ -33,7 +33,7 @@ swift test --disable-sandbox
 ./Packaging/build-app.sh
 ```
 
-See the [Chinese getting-started guide](docs/GETTING_STARTED.md), [troubleshooting](docs/TROUBLESHOOTING.md), and [protocol status](docs/PROTOCOL_STATUS.md) for detail.
+See the [getting-started guide](docs/GETTING_STARTED.md), [Chinese and English manual entry points](docs/manuals/), [troubleshooting](docs/TROUBLESHOOTING.md), and [protocol status](docs/PROTOCOL_STATUS.md) for detail.
 
 ## Scope and safety
 

@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/Ike-li/ak35i-v3-max-macos-control-center?display_name=tag&include_prereleases&sort=semver)](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases)
 [![License](https://img.shields.io/github/license/Ike-li/ak35i-v3-max-macos-control-center)](LICENSE)
 
-[English](README.en.md) · [下载](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [快速上手](docs/GETTING_STARTED.md) · [故障排查](docs/TROUBLESHOOTING.md) · [功能状态](docs/PROTOCOL_STATUS.md)
+[English](README.en.md) · [下载](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [快速上手](docs/GETTING_STARTED.md) · [中英文说明书](docs/manuals/) · [故障排查](docs/TROUBLESHOOTING.md) · [功能状态](docs/PROTOCOL_STATUS.md)
 
 面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前只允许向已实机验证的 USB HID 时钟通道写入时间；所有其他私有协议功能默认锁定。
 
@@ -62,6 +62,7 @@ open "dist/AK35i Control Center.app"
 | 你想做什么 | 文档 |
 |---|---|
 | 首次安装、同步时间或使用 CLI | [快速上手](docs/GETTING_STARTED.md) |
+| 区分型号，查看 V3 Max 中英文说明书入口与快捷键 | [中英文说明书](docs/manuals/) |
 | 处理 Gatekeeper、找不到设备等问题 | [故障排查](docs/TROUBLESHOOTING.md) |
 | 了解已验证与锁定功能 | [功能与协议状态](docs/PROTOCOL_STATUS.md) |
 | 理解为何不猜测私有 HID 命令 | [安全模型](docs/SAFETY_MODEL.md) |
