@@ -15,7 +15,7 @@ jobs:
     # to Xcode 15.4, while macos-15 provides a Swift 6 toolchain.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Show toolchain
         run: swift --version
       - name: Run tests
