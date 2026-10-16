@@ -7,8 +7,6 @@ final class ControlCenterModel: ObservableObject {
     @Published private(set) var snapshot: AK35iDeviceSnapshot = .disconnected
     @Published private(set) var message = "正在检测 USB 设备…"
     @Published private(set) var autoSyncEnabled = false
-    /// The 2.4G receiver, through which only the battery can be read.
-    @Published private(set) var receiverAttached = false
     @Published private(set) var isSyncing = false
     @Published private(set) var isStreaming = false
     /// Fraction of screen blocks written, or nil when no upload is running.
@@ -29,15 +27,15 @@ final class ControlCenterModel: ObservableObject {
 
     func refresh() {
         do {
-            snapshot = try AK35iHIDDeviceDiscovery().snapshot()
-            message = snapshot.connection == .usbWired ? "已刷新 USB HID 设备状态。" : "未发现 USB 有线控制接口。"
+            snapshot = try AK35iApplication.currentSnapshot()
+            switch snapshot.connection {
+            case .usbWired: message = "已刷新 USB HID 设备状态。"
+            case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量；其它功能暂时需要用数据线连接并切到 USB 模式。"
+            case .disconnected: message = "未发现 USB 有线控制接口或 2.4G 接收器。"
+            }
         } catch {
             snapshot = .disconnected
             message = error.localizedDescription
-        }
-        receiverAttached = AK35iReceiverTransport.isAttached()
-        if snapshot.connection == .disconnected && receiverAttached {
-            message = "已连接 2.4G 接收器：只能读取电量；其它功能需要用数据线连接并切到 USB 模式。"
         }
         autoSyncEnabled = AutoSyncLaunchAgentStore().isEnabled()
     }
@@ -298,17 +296,15 @@ private struct OverviewView: View {
     var body: some View {
         Form {
             Section("连接") {
-                if model.snapshot.connection == .disconnected && model.receiverAttached {
-                    LabeledContent("状态", value: "2.4G 接收器已连接（仅电量）")
-                    LabeledContent("产品", value: AK35iReceiverTransport.productName)
-                } else {
-                    LabeledContent("状态", value: model.snapshot.connection.displayName)
-                    LabeledContent("产品", value: model.snapshot.product ?? "未检测到")
-                }
+                LabeledContent("状态", value: model.snapshot.connection.displayName)
+                LabeledContent("产品", value: model.snapshot.product ?? "未检测到")
                 Button("刷新设备") { model.refresh() }
             }
             Section("厂商 HID 通道") {
-                if model.snapshot.channels.isEmpty {
+                if model.snapshot.connection == .wireless {
+                    Text("2.4G 下经接收器的 0xFF60 接口通信。")
+                        .foregroundStyle(.secondary)
+                } else if model.snapshot.channels.isEmpty {
                     Text("未发现。请使用数据线连接并切换到 USB 模式。")
                         .foregroundStyle(.secondary)
                 }
@@ -322,7 +318,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。电量经 2.4G 接收器只读读取。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。2.4G 下目前可同步时钟、只读读取电量。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -350,7 +346,7 @@ private struct ClockView: View {
                     Text("Mac 当前时区").tag(false)
                 }
                 Button("立即同步") { confirmsSync = true }
-                    .disabled(capability.state != .verified || model.isSyncing)
+                    .disabled(![.verified, .experimental].contains(capability.state) || model.isSyncing)
             }
             Section("可选自动同步") {
                 Toggle("登录时及每 24 小时同步 UTC+8", isOn: Binding(

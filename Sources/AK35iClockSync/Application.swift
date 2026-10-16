@@ -69,8 +69,21 @@ enum AK35iApplication {
         return level
     }
 
+    /// The cable's control interface when present, otherwise the 2.4G receiver.
+    static func currentSnapshot() throws -> AK35iDeviceSnapshot {
+        let wired = try AK35iHIDDeviceDiscovery().snapshot()
+        if wired.connection == .disconnected && AK35iReceiverTransport.isAttached() {
+            return .wireless
+        }
+        return wired
+    }
+
     static func syncClock(timeZone: ClockTimeZone) throws -> String {
         let time = ClockTime.from(Date(), timeZone: timeZone.timeZone)
+        if try currentSnapshot().connection == .wireless {
+            try WirelessSender.send([ClockProtocol.wirelessPacket(for: time)], over: AK35iReceiverTransport())
+            return "已经 2.4G 接收器同步 \(timeZone.displayName) 时间 \(formatted(time))，键盘已应答。"
+        }
         let transport = try AK35iHIDClockTransport()
 
         for (index, report) in ClockProtocol.reports(for: time).enumerated() {
@@ -505,7 +518,7 @@ enum AK35iApplication {
 
     private static func printStatus(json: Bool) -> Int32 {
         do {
-            let snapshot = try AK35iHIDDeviceDiscovery().snapshot()
+            let snapshot = try currentSnapshot()
             let capabilities = AK35iFeature.allCases.map(snapshot.capability)
             if json {
                 let document = StatusDocument(snapshot: snapshot, capabilities: capabilities)
@@ -516,7 +529,9 @@ enum AK35iApplication {
                 print("连接：\(snapshot.connection.displayName)")
                 print("设备：\(snapshot.product ?? "AK35i V3 Max")")
                 print("厂商 HID 通道：")
-                if snapshot.channels.isEmpty {
+                if snapshot.connection == .wireless {
+                    print("  2.4G 下经接收器的 0xFF60 接口通信。")
+                } else if snapshot.channels.isEmpty {
                     print("  未发现。请连接 USB 数据线并切换到 USB 模式。")
                 }
                 for channel in snapshot.channels {
@@ -538,21 +553,18 @@ enum AK35iApplication {
     private static func runTimeSync(timeZone: ClockTimeZone, apply: Bool) -> Int32 {
         let time = ClockTime.from(Date(), timeZone: timeZone.timeZone)
         do {
-            let transport = try AK35iHIDClockTransport()
-            print("已找到：\(transport.description())")
+            if try currentSnapshot().connection == .wireless {
+                print("已找到：2.4G 接收器")
+            } else {
+                print("已找到：\(try AK35iHIDClockTransport().description())")
+            }
             print("待同步时间（\(timeZone.displayName)）：\(formatted(time))")
             guard apply else {
                 print("预检通过；未向键盘写入。确认执行请加 --apply。")
                 return EXIT_SUCCESS
             }
-
-            for (index, report) in ClockProtocol.reports(for: time).enumerated() {
-                Thread.sleep(forTimeInterval: 0.03)
-                try transport.writeFeature(report, packetIndex: index + 1)
-                transport.readFeatureBestEffort()
-            }
-            Thread.sleep(forTimeInterval: 0.1)
-            print("同步报文已写入。请查看键盘屏幕；必要时切回蓝牙模式确认时间仍保留。")
+            print(try syncClock(timeZone: timeZone))
+            print("请查看键盘屏幕。")
             return EXIT_SUCCESS
         } catch {
             fputs("错误：\(error.localizedDescription)\n", stderr)

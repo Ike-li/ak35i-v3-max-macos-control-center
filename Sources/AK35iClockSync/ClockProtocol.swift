@@ -38,6 +38,20 @@ enum ClockProtocol {
         preamble[2] = 0x28
         preamble[9] = 0x01
 
+        var save = blankReport()
+        save[1] = 0x04
+        save[2] = 0x02
+
+        return [start, preamble, dataReport(for: time), save]
+    }
+
+    /// DeviceDriver.exe 0x423bf0: through the 2.4G receiver the data frame
+    /// alone is sent, as one packet.
+    static func wirelessPacket(for time: ClockTime) -> [UInt8] {
+        WirelessProtocol.settings(0x0c, frame: Array(dataReport(for: time).dropFirst()))
+    }
+
+    private static func dataReport(for time: ClockTime) -> [UInt8] {
         var data = blankReport()
         data[2] = 0x01
         data[3] = 0x5a
@@ -50,12 +64,7 @@ enum ClockProtocol {
         data[11] = UInt8(clamping: time.weekday)
         data[63] = 0xaa
         data[64] = 0x55
-
-        var save = blankReport()
-        save[1] = 0x04
-        save[2] = 0x02
-
-        return [start, preamble, data, save]
+        return data
     }
 
     private static func blankReport() -> [UInt8] {

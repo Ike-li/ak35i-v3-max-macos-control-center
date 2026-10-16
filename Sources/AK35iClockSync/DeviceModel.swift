@@ -3,11 +3,14 @@ import Foundation
 enum AK35iConnection: String, Codable, Equatable {
     case disconnected
     case usbWired
+    /// Only the 2.4G receiver: commands go through its 32-byte interface.
+    case wireless
 
     var displayName: String {
         switch self {
         case .disconnected: return "未发现 USB 有线控制接口"
         case .usbWired: return "USB 有线已连接"
+        case .wireless: return "2.4G 接收器已连接"
         }
     }
 }
@@ -138,7 +141,17 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         serialNumber: nil
     )
 
+    static let wireless = AK35iDeviceSnapshot(
+        connection: .wireless,
+        channels: [],
+        product: AK35iReceiverTransport.productName,
+        serialNumber: nil
+    )
+
     func capability(_ feature: AK35iFeature) -> AK35iCapability {
+        if connection == .wireless {
+            return wirelessCapability(feature)
+        }
         guard connection == .usbWired else {
             return AK35iCapability(
                 feature: feature,
@@ -162,8 +175,8 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         case .battery:
             return AK35iCapability(
                 feature: feature,
-                state: .experimental,
-                detail: "经 2.4G 接收器只读读取，已在此键盘实测（应答 20 01 00 加百分比）。有线 USB 下键盘不提供电量。"
+                state: .notConnected,
+                detail: "有线 USB 下键盘不提供电量，请看键盘屏幕；插上 2.4G 接收器并拨到 2.4G 档后可读取。"
             )
         case .lighting:
             return AK35iCapability(
@@ -210,6 +223,35 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         case (0xfffd, 0x0001): return .stateQuery
         case (0xff68, 0x0061): return .screenTransfer
         default: return .unknown
+        }
+    }
+}
+
+extension AK35iDeviceSnapshot {
+    /// Through the receiver the keyboard takes the driver's 2.4G packets
+    /// (firmware 0x67C8); features are listed here as they are ported.
+    fileprivate func wirelessCapability(_ feature: AK35iFeature) -> AK35iCapability {
+        switch feature {
+        case .diagnostics:
+            return AK35iCapability(feature: feature, state: .verified, detail: "已识别 2.4G 接收器的 0xFF60 接口。")
+        case .battery:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器只读读取，已在此键盘实测（应答 20 01 00 加百分比）。"
+            )
+        case .clock:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器发送一包 0C（与 Windows 驱动相同），已在此键盘实测。"
+            )
+        default:
+            return AK35iCapability(
+                feature: feature,
+                state: .notConnected,
+                detail: "2.4G 下尚未支持，请用数据线连接并切到 USB 模式。"
+            )
         }
     }
 }

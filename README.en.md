@@ -11,7 +11,7 @@ A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. T
 | Verified hardware | AK35i V3 Max, USB VID:PID `0C45:8009` |
 | Verified write | Screen clock sync: UTC+8 or the Mac system time zone |
 | Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors from the Per-key page or `ak35i keys set Esc=FF0000`; system settings (disable Win / Alt+Tab / Alt+F4, sleep, key response, Fn switch) from the System page or `ak35i system set`; key remapping (base and Fn layers) from the Keymap page or `ak35i keymap set CapsLock=Esc`; macros from the Macros page or `ak35i macro set "Cmd+Space, 100ms, A"`, bound to a key with `macro:N`; realtime effects and music visualisation streamed from the Mac (nothing stored on the keyboard) from the Realtime page or `ak35i live wave` / `ak35i live music`; screen GIF page from the Screen page or `ak35i screen set picture.gif` |
-| Connection | USB wired mode; through the 2.4G receiver only the battery can be read; no Bluetooth |
+| Connection | USB wired mode; through the 2.4G receiver the clock and battery work so far, the rest is being ported; no Bluetooth (the keyboard firmware ignores settings commands over Bluetooth) |
 | Release build | Apple Silicon (`arm64`), macOS 13+ |
 | Read only | Battery, only through the 2.4G receiver, from the Battery page or `ak35i battery`; the keyboard does not report it over wired USB |
 | Privacy | No account, telemetry, upload, or device serial-number display/persistence |

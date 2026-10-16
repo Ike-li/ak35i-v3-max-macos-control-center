@@ -22,13 +22,7 @@ enum BatteryError: LocalizedError {
 enum BatteryProtocol {
     static let reportLength = 32
 
-    static let request: [UInt8] = {
-        var report = [UInt8](repeating: 0, count: reportLength)
-        report[0] = 0x20
-        report[1] = 0x01
-        report[reportLength - 1] = report.reduce(0, &+)
-        return report
-    }()
+    static let request = WirelessProtocol.packet(0x20, length: 0x01, data: [])
 
     /// The percentage, or nil for a reply the driver would not accept.
     static func level(from reply: [UInt8]) -> Int? {
