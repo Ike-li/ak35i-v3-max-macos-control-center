@@ -82,6 +82,40 @@ final class PerKeyLightingTests: XCTestCase {
         XCTAssertEqual(PerKeyVerification.mismatchedLights(expected: expected, readBack: readBack), [1, 2])
     }
 
+    func testKeyRectanglesFitTheLayoutImageWithoutOverlapping() {
+        let keys = KeyboardLayout.keys
+        XCTAssertTrue(keys.allSatisfy { $0.x >= 0 && $0.y >= 0 && $0.x + $0.width <= 800 && $0.y + $0.height <= 300 })
+        for (index, a) in keys.enumerated() {
+            for b in keys[(index + 1)...] {
+                let overlaps = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+                XCTAssertFalse(overlaps, "\(a.name) overlaps \(b.name)")
+            }
+        }
+    }
+
+    func testEditorPaintsSelectedKeysAndWritesExactlyWhatItShows() {
+        let green = RGBColor(red: 0, green: 0xff, blue: 0)
+        var editor = PerKeyEditorState()
+        XCTAssertEqual(editor.colors.count, 104)
+        XCTAssertTrue(editor.colors.values.allSatisfy { $0 == black })
+
+        editor.toggle(1)
+        editor.toggle(39)
+        editor.toggle(39)
+        editor.paintSelection(red)
+        XCTAssertEqual(editor.selection, [1])
+        XCTAssertEqual(editor.colors[1], red)
+        XCTAssertEqual(editor.colors[39], black)
+
+        editor.fill(green)
+        XCTAssertTrue(editor.colors.values.allSatisfy { $0 == green })
+
+        editor.colors[1] = red
+        let request = editor.request(brightness: 3)
+        XCTAssertEqual(request.brightness, 3)
+        XCTAssertEqual(request.resolve(stored: [1: black, 2: red]), editor.colors)
+    }
+
     func testRequestMergesOntoStoredColoursUnlessCleared() {
         let green = RGBColor(red: 0, green: 0xff, blue: 0)
         let blue = RGBColor(red: 0, green: 0, blue: 0xff)

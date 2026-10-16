@@ -142,14 +142,16 @@ enum AK35iApplication {
         }
     }
 
+    /// Stored colours are only readable in custom mode, so reading switches to it.
+    static func readPerKeyColors(brightness: Int) throws -> [UInt8: RGBColor] {
+        let transport = try AK35iHIDClockTransport()
+        try switchToCustomMode(brightness: brightness, transport)
+        return try readStoredKeyColors(transport)
+    }
+
     static func applyPerKeyColors(_ request: PerKeyColorRequest) throws -> String {
         let transport = try AK35iHIDClockTransport()
-        let mode = try FeatureSequenceWriter.send(LightingProtocol.customModePackets(brightness: request.brightness), to: transport)
-        guard mode.unacknowledgedPackets.isEmpty else {
-            throw FeatureSequenceError.packetsNotAcknowledged(mode.unacknowledgedPackets)
-        }
-
-        Thread.sleep(forTimeInterval: 0.3)
+        try switchToCustomMode(brightness: request.brightness, transport)
         let target = request.resolve(stored: try readStoredKeyColors(transport))
         let write = try FeatureSequenceWriter.send(PerKeyProtocol.writePackets(colors: target), to: transport)
         guard write.unacknowledgedPackets.isEmpty else {
@@ -167,6 +169,14 @@ enum AK35iApplication {
             throw PerKeyLightingError.verificationFailed(names)
         }
         return "已写入自定义单键颜色（\(lit) 个按键有颜色），键盘已确认全部命令，读回核对一致。可用 Fn+\\| 切回其他灯效。"
+    }
+
+    private static func switchToCustomMode(brightness: Int, _ transport: AK35iHIDClockTransport) throws {
+        let mode = try FeatureSequenceWriter.send(LightingProtocol.customModePackets(brightness: brightness), to: transport)
+        guard mode.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(mode.unacknowledgedPackets)
+        }
+        Thread.sleep(forTimeInterval: 0.3)
     }
 
     /// Reads twice: in custom mode the readback is static; differing reads mean

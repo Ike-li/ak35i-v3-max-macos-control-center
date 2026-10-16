@@ -2,7 +2,7 @@
 
 [中文](README.md) · [Download](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [Getting started](docs/GETTING_STARTED.md) · [Chinese and English manuals](docs/manuals/) · [Protocol status](docs/PROTOCOL_STATUS.md)
 
-A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes backed by physical-device evidence: the verified screen clock and experimental basic lighting (Lighting page or CLI) and per-key colors (CLI). All other vendor-HID writes remain locked.
+A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes backed by physical-device evidence: the verified screen clock and experimental basic lighting (Lighting page or CLI) and per-key colors. All other vendor-HID writes remain locked.
 
 ## At a glance
 
@@ -10,7 +10,7 @@ A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. T
 |---|---|
 | Verified hardware | AK35i V3 Max, USB VID:PID `0C45:8009` |
 | Verified write | Screen clock sync: UTC+8 or the Mac system time zone |
-| Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors via `ak35i keys set Esc=FF0000` |
+| Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors from the Per-key page or `ak35i keys set Esc=FF0000` |
 | Connection | USB wired mode only |
 | Release build | Apple Silicon (`arm64`), macOS 13+ |
 | Deliberately locked | User lighting, music rhythm, image/GIF upload, remapping, macros, battery reads |

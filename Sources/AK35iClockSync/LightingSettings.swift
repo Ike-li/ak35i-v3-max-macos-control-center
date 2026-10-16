@@ -24,6 +24,10 @@ struct LightingSettings: Equatable {
 }
 
 extension RGBColor {
+    var cgColor: CGColor {
+        CGColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
+    }
+
     init?(cgColor: CGColor) {
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let srgb = cgColor.converted(to: space, intent: .defaultIntent, options: nil),

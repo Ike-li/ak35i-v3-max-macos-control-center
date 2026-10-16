@@ -45,6 +45,25 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func readKeyColors(brightness: Int) -> [UInt8: RGBColor]? {
+        do {
+            let colors = try AK35iApplication.readPerKeyColors(brightness: brightness)
+            message = "已从键盘读取单键颜色；键盘已切到自定义单键模式。"
+            return colors
+        } catch {
+            message = "读取失败：\(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    func applyKeyColors(_ request: PerKeyColorRequest) {
+        do {
+            message = try AK35iApplication.applyPerKeyColors(request)
+        } catch {
+            message = "单键颜色写入失败：\(error.localizedDescription)"
+        }
+    }
+
     func setAutoSync(_ enabled: Bool) {
         do {
             let store = AutoSyncLaunchAgentStore()
@@ -68,6 +87,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
     case clock
     case battery
     case lighting
+    case perKey
     case screen
     case keymap
     case macros
@@ -80,6 +100,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .clock: return "时钟"
         case .battery: return "电量"
         case .lighting: return "灯光"
+        case .perKey: return "单键灯光"
         case .screen: return "屏幕"
         case .keymap: return "改键"
         case .macros: return "宏"
@@ -92,6 +113,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .clock: return "clock"
         case .battery: return "battery.75percent"
         case .lighting: return "lightbulb.2"
+        case .perKey: return "square.grid.3x3"
         case .screen: return "rectangle.on.rectangle"
         case .keymap: return "command"
         case .macros: return "record.circle"
@@ -123,6 +145,8 @@ private struct ControlCenterRootView: View {
                 LockedFeatureView(model: model, feature: .battery)
             case .lighting:
                 LightingView(model: model)
+            case .perKey:
+                PerKeyView(model: model)
             case .screen:
                 LockedFeatureView(model: model, feature: .screenUpload)
             case .keymap:
@@ -255,14 +279,7 @@ private struct LightingView: View {
                 if mode.supportsColor {
                     Toggle("多彩", isOn: $settings.colorful)
                     ColorPicker("颜色", selection: Binding(
-                        get: {
-                            CGColor(
-                                srgbRed: CGFloat(settings.color.red) / 255,
-                                green: CGFloat(settings.color.green) / 255,
-                                blue: CGFloat(settings.color.blue) / 255,
-                                alpha: 1
-                            )
-                        },
+                        get: { settings.color.cgColor },
                         set: { if let picked = RGBColor(cgColor: $0) { settings.color = picked } }
                     ), supportsOpacity: false)
                     .disabled(settings.colorful)
@@ -285,6 +302,122 @@ private struct LightingView: View {
         } message: {
             Text("实验性功能：将写入「\(mode.displayName)」并保存到键盘。")
         }
+    }
+}
+
+private struct PerKeyView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var editor = PerKeyEditorState()
+    @State private var brush = RGBColor(red: 0xff, green: 0x00, blue: 0x00)
+    @State private var brightness = LightingEffect.defaultBrightness
+    @State private var confirmsRead = false
+    @State private var confirmsApply = false
+
+    private var capability: AK35iCapability { model.snapshot.capability(.perKeyLighting) }
+    private let black = RGBColor(red: 0, green: 0, blue: 0)
+
+    var body: some View {
+        Form {
+            Section("自定义单键灯光") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                KeyboardCanvas(editor: $editor)
+                    .frame(minHeight: 200)
+                HStack {
+                    ColorPicker("画笔颜色", selection: Binding(
+                        get: { brush.cgColor },
+                        set: { if let picked = RGBColor(cgColor: $0) { brush = picked } }
+                    ), supportsOpacity: false)
+                    Button("涂到所选键") { editor.paintSelection(brush) }
+                        .disabled(editor.selection.isEmpty)
+                    Button("全部涂成此色") { editor.fill(brush) }
+                    Button("全部熄灭") { editor.fill(black) }
+                }
+                HStack {
+                    Text("已选 \(editor.selection.count) 个键").foregroundStyle(.secondary)
+                    Button("全选") { editor.selection = Set(editor.colors.keys) }
+                    Button("取消选择") { editor.selection = [] }
+                }
+                Picker("亮度（0 为熄灭）", selection: $brightness) {
+                    ForEach(LightingEffect.levels, id: \.self) { Text("\($0)").tag($0) }
+                }
+                .pickerStyle(.segmented)
+                HStack {
+                    Button("从键盘读取") { confirmsRead = true }
+                    Button("写入键盘") { confirmsApply = true }
+                }
+                .disabled(capability.state != .experimental)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("单键灯光")
+        .padding()
+        .alert("从键盘读取单键颜色？", isPresented: $confirmsRead) {
+            Button("取消", role: .cancel) {}
+            Button("读取") {
+                if let colors = model.readKeyColors(brightness: brightness) { editor.colors = colors }
+            }
+        } message: {
+            Text("已保存的单键颜色只能在自定义单键模式下读出，读取会把键盘灯效切到该模式。")
+        }
+        .alert("将单键颜色写入键盘？", isPresented: $confirmsApply) {
+            Button("取消", role: .cancel) {}
+            Button("写入") { model.applyKeyColors(editor.request(brightness: brightness)) }
+        } message: {
+            Text("实验性功能：键盘会切到自定义单键模式，并按编辑器中的颜色写入全部 104 个键。")
+        }
+    }
+}
+
+/// Keys drawn at their rectangles in the driver's layout image.
+private struct KeyboardCanvas: View {
+    @Binding var editor: PerKeyEditorState
+    private static let origin = CGPoint(x: 30, y: 48)
+    private static let extent = CGSize(width: 740, height: 212)
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = min(proxy.size.width / Self.extent.width, proxy.size.height / Self.extent.height)
+            ZStack(alignment: .topLeading) {
+                ForEach(KeyboardLayout.keys, id: \.light) { key in
+                    KeyCap(
+                        key: key,
+                        color: editor.colors[key.light] ?? RGBColor(red: 0, green: 0, blue: 0),
+                        selected: editor.selection.contains(key.light),
+                        scale: scale
+                    )
+                    .offset(x: (CGFloat(key.x) - Self.origin.x) * scale, y: (CGFloat(key.y) - Self.origin.y) * scale)
+                    .onTapGesture { editor.toggle(key.light) }
+                }
+            }
+        }
+        .aspectRatio(Self.extent.width / Self.extent.height, contentMode: .fit)
+    }
+}
+
+private struct KeyCap: View {
+    let key: KeyboardKey
+    let color: RGBColor
+    let selected: Bool
+    let scale: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 3 * scale)
+        let isLight = 0.299 * Double(color.red) + 0.587 * Double(color.green) + 0.114 * Double(color.blue) > 140
+        shape
+            .fill(Color(cgColor: color.cgColor))
+            .overlay(shape.stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: selected ? 3 : 1))
+            .overlay(
+                Text(key.name)
+                    .font(.system(size: 7 * scale))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(1)
+                    .foregroundStyle(isLight ? Color.black : Color.white)
+            )
+            .frame(width: CGFloat(key.width) * scale, height: CGFloat(key.height) * scale)
+            .contentShape(shape)
     }
 }
 

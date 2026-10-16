@@ -169,7 +169,7 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
             return AK35iCapability(
                 feature: feature,
                 state: .experimental,
-                detail: "已在此键盘实机验证单键写入（设备确认、读回一致、重连后保留）。写入前读取已保存的颜色并合并；目前仅能用 CLI ak35i keys set 写入，可用 Fn+\\| 切回其他灯效。"
+                detail: "已在此键盘实机验证单键写入（设备确认、读回一致、重连后保留）。写入前读取已保存的颜色并合并；可在单键灯光页或用 CLI ak35i keys set 写入，可用 Fn+\\| 切回其他灯效。"
             )
         case .screenUpload:
             return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")
