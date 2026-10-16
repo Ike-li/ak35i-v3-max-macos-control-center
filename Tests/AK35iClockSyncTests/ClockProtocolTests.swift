@@ -43,7 +43,7 @@ final class ClockProtocolTests: XCTestCase {
         XCTAssertEqual(snapshot.connection, .usbWired)
         XCTAssertEqual(snapshot.channels.map(\.kind), [.clockAndSettings, .screenTransfer])
         XCTAssertEqual(snapshot.capability(.clock).state, .verified)
-        XCTAssertEqual(snapshot.capability(.screenUpload).state, .captureRequired)
+        XCTAssertEqual(snapshot.capability(.screenUpload).state, .experimental)
         XCTAssertEqual(snapshot.capability(.lighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.perKeyLighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.systemSettings).state, .experimental)
@@ -61,7 +61,7 @@ final class ClockProtocolTests: XCTestCase {
             .previewTime(timeZone: .utcPlusEight)
         )
         XCTAssertThrowsError(try AK35iCommandParser.parse(["apply", "screen", "avatar.gif"])) { error in
-            XCTAssertEqual(error as? AK35iCommandError, .featureRequiresCapture(.screenUpload))
+            guard case .invalidUsage = error as? AK35iCommandError else { return XCTFail("\(error)") }
         }
     }
 

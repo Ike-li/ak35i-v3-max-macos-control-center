@@ -180,7 +180,11 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
                 detail: "已在此键盘实机验证：Win 档下禁用 Alt+Tab、禁用 Alt+F4 生效；只开禁用 Win 不生效，需同时开禁用 Alt+F4；Mac 档下禁用 Win 不拦截。休眠、响应时间、Fn 开关和拔插后是否保留尚未确认。键盘不提供读取，每次整体写入；可在系统设置页或用 CLI ak35i system set 写入。"
             )
         case .screenUpload:
-            return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "已在此键盘实机验证上传单帧测试图：16 块全部收到键盘回复，上传后屏幕立即显示该图，拔插后上电仍播放出厂开机动画，随后回到原来的界面。上传只覆盖屏幕 GIF 页，断电后保留，按 Fn+PrtSc 显示、再按返回。键盘不提供读取，原 GIF 页内容无法恢复。可在屏幕页或用 CLI ak35i screen set 上传。"
+            )
         case .keymap:
             return AK35iCapability(
                 feature: feature,

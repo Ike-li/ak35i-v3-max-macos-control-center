@@ -43,17 +43,20 @@ enum AK35iCommand: Equatable {
     case keymapReset([KeymapLayer], apply: Bool)
     case macroSet([Macro], apply: Bool)
     case live(LiveRequest)
+    case screenSet(ScreenSource, preview: String?, apply: Bool)
+}
+
+enum ScreenSource: Equatable {
+    case file(String)
+    case testPattern
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
     case invalidUsage(String)
-    case featureRequiresCapture(AK35iFeature)
 
     var errorDescription: String? {
         switch self {
         case .invalidUsage(let message): return message
-        case .featureRequiresCapture(let feature):
-            return "\(feature.displayName) 尚未取得 V3 Max 的抓包验证，安全策略已阻止写入。"
         }
     }
 }
@@ -119,10 +122,10 @@ enum AK35iCommandParser {
             return try parseMacros(Array(values.dropFirst(2)), allowEmpty: false)
         case let values where values.starts(with: ["macro", "clear"]):
             return try parseMacros(Array(values.dropFirst(2)), allowEmpty: true)
+        case let values where values.starts(with: ["screen", "set"]):
+            return try parseScreenSet(Array(values.dropFirst(2)))
         case let values where values.first == "live":
             return try parseLive(Array(values.dropFirst()))
-        case let values where values.starts(with: ["apply", "screen"]):
-            throw AK35iCommandError.featureRequiresCapture(.screenUpload)
         default:
             throw AK35iCommandError.invalidUsage("未知命令。运行 ak35i --help 查看可用命令。")
         }
@@ -370,6 +373,31 @@ enum AK35iCommandParser {
         default: request.effect = .wave
         }
         return .live(request)
+    }
+
+    private static func parseScreenSet(_ options: [String]) throws -> AK35iCommand {
+        let usage = AK35iCommandError.invalidUsage("用法：ak35i screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
+        var source: ScreenSource?
+        var preview: String?
+        var apply = false
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--apply":
+                apply = true
+            case "--test-pattern":
+                guard source == nil else { throw usage }
+                source = .testPattern
+            case "--preview":
+                guard preview == nil, let value = remaining.popFirst() else { throw usage }
+                preview = value
+            default:
+                guard source == nil, !option.hasPrefix("--") else { throw usage }
+                source = .file(option)
+            }
+        }
+        guard let source else { throw usage }
+        return .screenSet(source, preview: preview, apply: apply)
     }
 
     private static func keymapLayer(_ value: String) -> KeymapLayer? {

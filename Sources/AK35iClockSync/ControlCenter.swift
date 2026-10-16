@@ -9,6 +9,8 @@ final class ControlCenterModel: ObservableObject {
     @Published private(set) var autoSyncEnabled = false
     @Published private(set) var isSyncing = false
     @Published private(set) var isStreaming = false
+    /// Fraction of screen blocks written, or nil when no upload is running.
+    @Published private(set) var screenProgress: Double?
     private var liveStop: StopFlag?
 
     let executablePath: String
@@ -109,6 +111,34 @@ final class ControlCenterModel: ObservableObject {
             DispatchQueue.main.async {
                 self.liveStop = nil
                 self.isStreaming = false
+                self.message = outcome
+            }
+        }
+    }
+
+    func uploadScreen(_ frames: [ScreenFrame]) {
+        guard screenProgress == nil else { return }
+        let upload: ScreenUpload
+        do {
+            upload = try ScreenProtocol.upload(frames: frames)
+        } catch {
+            message = "屏幕上传失败：\(error.localizedDescription)"
+            return
+        }
+        screenProgress = 0
+        message = "正在上传屏幕动画…"
+        let total = Double(upload.blocks.count)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome: String
+            do {
+                outcome = try AK35iApplication.uploadScreen(upload) { done in
+                    DispatchQueue.main.async { self.screenProgress = Double(done) / total }
+                }
+            } catch {
+                outcome = "屏幕上传失败：\(error.localizedDescription)"
+            }
+            DispatchQueue.main.async {
+                self.screenProgress = nil
                 self.message = outcome
             }
         }
@@ -220,7 +250,7 @@ private struct ControlCenterRootView: View {
             case .live:
                 LiveView(model: model)
             case .screen:
-                LockedFeatureView(model: model, feature: .screenUpload)
+                ScreenView(model: model)
             case .keymap:
                 KeymapView(model: model)
             case .macros:
@@ -256,7 +286,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键和宏为实验性写入。屏幕在取得实机证据前保持锁定。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。电量读取在取得实机证据前保持锁定。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -669,6 +699,83 @@ private struct LiveView: View {
         .navigationTitle("实时灯效")
         .padding()
         .onDisappear { model.stopLive() }
+    }
+}
+
+private struct ScreenView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var frames = [ScreenImage.testPattern()]
+    @State private var sourceName = "测试图"
+    @State private var importing = false
+    @State private var confirmsUpload = false
+    @State private var loadError: String?
+
+    private var capability: AK35iCapability { model.snapshot.capability(.screenUpload) }
+    private var blockCount: Int { (try? ScreenProtocol.upload(frames: frames).blocks.count) ?? 0 }
+
+    var body: some View {
+        Form {
+            Section("屏幕 GIF 页") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 16) {
+                    Image(decorative: ScreenImage.preview(of: frames[0]), scale: 1)
+                        .interpolation(.none)
+                        .resizable()
+                        .frame(width: 360, height: 202.5)
+                        .border(Color.secondary.opacity(0.4))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(sourceName).fontWeight(.medium)
+                        Text("\(frames.count) 帧 · \(blockCount) 块 · 约 \(Int((Double(blockCount) * 0.16).rounded(.up))) 秒")
+                            .foregroundStyle(.secondary)
+                        Text("预览为键盘上的实际效果（240×135，RGB565）。").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let loadError {
+                    Text(loadError).foregroundStyle(.red)
+                }
+                HStack {
+                    Button("选择图片或 GIF…") { importing = true }
+                    Button("使用测试图") {
+                        frames = [ScreenImage.testPattern()]
+                        sourceName = "测试图"
+                        loadError = nil
+                    }
+                }
+                .disabled(model.screenProgress != nil)
+                if let progress = model.screenProgress {
+                    ProgressView(value: progress) { Text("正在上传") }
+                } else {
+                    Button("上传到键盘") { confirmsUpload = true }
+                        .disabled(capability.state != .experimental)
+                }
+            }
+            Section("说明") {
+                Text("上传只覆盖屏幕的 GIF 页（外置闪存 0x950000）。在这台键盘上实测：上传后屏幕立即显示新内容；拔插后上电仍播放出厂开机动画，随后回到原来的界面。上传内容断电后保留，按 Fn+PrtSc 切到 GIF 页查看，再按一次返回主页面。GIF 页原来的内容无法读回，覆盖后不能恢复。超过 \(ScreenProtocol.maxFrames) 帧的 GIF 只保留前 \(ScreenProtocol.maxFrames) 帧。")
+                    .foregroundStyle(.secondary)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("屏幕")
+        .padding()
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.image]) { result in
+            do {
+                let url = try result.get()
+                let loaded = try ScreenImage.frames(from: Data(contentsOf: url))
+                frames = Array(loaded.prefix(ScreenProtocol.maxFrames))
+                sourceName = url.lastPathComponent + (loaded.count > ScreenProtocol.maxFrames ? "（已截取前 \(ScreenProtocol.maxFrames) 帧）" : "")
+                loadError = nil
+            } catch {
+                loadError = error.localizedDescription
+            }
+        }
+        .alert("上传到键盘屏幕？", isPresented: $confirmsUpload) {
+            Button("取消", role: .cancel) {}
+            Button("上传") { model.uploadScreen(frames) }
+        } message: {
+            Text("实验性功能：将覆盖屏幕 GIF 页，原内容无法恢复。上传期间请勿拔线。")
+        }
     }
 }
 

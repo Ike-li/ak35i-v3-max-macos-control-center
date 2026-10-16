@@ -42,6 +42,8 @@ enum AK35iApplication {
             return runMacroSet(macros, apply: apply)
         case .live(let request):
             return runLive(request)
+        case .screenSet(let source, let preview, let apply):
+            return runScreenSet(source, preview: preview, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -91,6 +93,8 @@ enum AK35iApplication {
         print("  live solid|breathing|wave|starry|music [选项]  由电脑实时推送灯效（实验性），Ctrl+C 停止，停止后键盘恢复原灯效")
         print("      --color RRGGBB（wave、music 除外）  --speed 1-5（solid、music 除外）  --seconds N")
         print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
+        print("  screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
+        print("      预览或上传屏幕动画（实验性），缩放到 240×135，最多 141 帧；覆盖屏幕 GIF 页，无法读回")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -378,6 +382,62 @@ enum AK35iApplication {
         }
         let duration = max(Date().timeIntervalSince(start), 0.001)
         return (sent, skipped, Double(sent + skipped) / duration, audio == nil ? nil : heardAudio)
+    }
+
+    private static func runScreenSet(_ source: ScreenSource, preview: String?, apply: Bool) -> Int32 {
+        do {
+            var frames: [ScreenFrame]
+            switch source {
+            case .testPattern:
+                frames = [ScreenImage.testPattern()]
+            case .file(let path):
+                frames = try ScreenImage.frames(from: Data(contentsOf: URL(fileURLWithPath: path)))
+            }
+            if frames.count > ScreenProtocol.maxFrames {
+                print("图片有 \(frames.count) 帧，只保留前 \(ScreenProtocol.maxFrames) 帧（与 Windows 驱动相同）。")
+                frames = Array(frames.prefix(ScreenProtocol.maxFrames))
+            }
+            let upload = try ScreenProtocol.upload(frames: frames)
+            print("屏幕动画：\(frames.count) 帧，\(upload.blocks.count) 块（每块 4096 字节）。")
+            if let preview {
+                try ScreenImage.writePreview(frames[0], to: URL(fileURLWithPath: preview))
+                print("已保存第一帧在键盘上的效果（RGB565）：\(preview)")
+            }
+            guard apply else {
+                print("预览完成；未连接或写入键盘。确认写入请加 --apply。写入会覆盖屏幕 GIF 页，键盘无法读回原内容。")
+                return EXIT_SUCCESS
+            }
+            print(try uploadScreen(upload) { done in
+                if done == upload.blocks.count || done % 16 == 0 { print("  已写入 \(done)/\(upload.blocks.count) 块") }
+            })
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    static func uploadScreen(_ upload: ScreenUpload, progress: (Int) -> Void = { _ in }) throws -> String {
+        let control = try AK35iHIDClockTransport()
+        let screen = try AK35iScreenTransport()
+        let start = try FeatureSequenceWriter.send(upload.start, to: control)
+        guard start.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(start.unacknowledgedPackets)
+        }
+        var missingReplies = 0
+        var firstReply: [UInt8]?
+        for (index, block) in upload.blocks.enumerated() {
+            if let reply = try screen.send(block: block, index: index + 1) {
+                if firstReply == nil { firstReply = reply }
+            } else {
+                missingReplies += 1
+            }
+            progress(index + 1)
+        }
+        let commit = try FeatureSequenceWriter.send([upload.commit], to: control)
+        guard commit.unacknowledgedPackets.isEmpty else { throw FeatureSequenceError.packetsNotAcknowledged([upload.blocks.count + 3]) }
+        let reply = firstReply.map { $0.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ") } ?? "无"
+        return "已上传屏幕动画（\(upload.blocks.count) 块），键盘已确认开始和保存命令；\(upload.blocks.count - missingReplies) 块收到键盘回复（首个回复 \(reply)）。按 Fn+PrtSc 查看，再按一次返回主页面。"
     }
 
     static func applyMacros(_ macros: [Macro]) throws -> String {

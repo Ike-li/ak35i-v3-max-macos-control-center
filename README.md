@@ -6,7 +6,7 @@
 
 [English](README.en.md) · [下载](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [快速上手](docs/GETTING_STARTED.md) · [中英文说明书](docs/manuals/) · [故障排查](docs/TROUBLESHOOTING.md) · [功能状态](docs/PROTOCOL_STATUS.md)
 
-面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前开放已实机验证的屏幕时钟，以及实验性的基础灯效（灯光页或 CLI）、自定义单键灯光、系统设置、改键、宏，以及由电脑推送的实时灯效和音乐律动；其他私有协议功能默认锁定。
+面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前开放已实机验证的屏幕时钟，以及实验性的基础灯效（灯光页或 CLI）、自定义单键灯光、系统设置、改键、宏、屏幕 GIF 页上传，以及由电脑推送的实时灯效和音乐律动；其他私有协议功能默认锁定。
 
 > Independent community project. It is not affiliated with, endorsed by, or supported by AJAZZ. See [NOTICE.md](NOTICE.md).
 
@@ -16,10 +16,10 @@
 |---|---|
 | 已验证硬件 | USB VID:PID `0C45:8009` 的 AK35i V3 Max |
 | 已验证写入 | 屏幕时钟：UTC+8 或 Mac 当前时区 |
-| 实验性写入 | 基础灯效：20 种模式及亮度、速度、方向、颜色，控制中心“灯光”页或 `ak35i light set`；自定义单键颜色：“单键灯光”页或 `ak35i keys set Esc=FF0000`；系统设置（禁用 Win / Alt+Tab / Alt+F4、休眠、响应时间、Fn 开关）：“系统设置”页或 `ak35i system set`；改键（普通层与 Fn 层）：“改键”页或 `ak35i keymap set CapsLock=Esc`；宏：“宏”页或 `ak35i macro set "Cmd+Space, 100ms, A"`，再用 `macro:N` 绑定到键；实时灯效与音乐律动（电脑逐帧推送，不写入键盘）：“实时灯效”页或 `ak35i live wave`、`ak35i live music` |
+| 实验性写入 | 基础灯效：20 种模式及亮度、速度、方向、颜色，控制中心“灯光”页或 `ak35i light set`；自定义单键颜色：“单键灯光”页或 `ak35i keys set Esc=FF0000`；系统设置（禁用 Win / Alt+Tab / Alt+F4、休眠、响应时间、Fn 开关）：“系统设置”页或 `ak35i system set`；改键（普通层与 Fn 层）：“改键”页或 `ak35i keymap set CapsLock=Esc`；宏：“宏”页或 `ak35i macro set "Cmd+Space, 100ms, A"`，再用 `macro:N` 绑定到键；实时灯效与音乐律动（电脑逐帧推送，不写入键盘）：“实时灯效”页或 `ak35i live wave`、`ak35i live music`；屏幕 GIF 页：“屏幕”页或 `ak35i screen set 图片.gif` |
 | 连接要求 | USB 有线模式；蓝牙与 2.4G 不提供控制承诺 |
 | 支持系统 | 当前发布包为 Apple Silicon (`arm64`)、macOS 13+ |
-| 未开放写入 | 图片/GIF、电量读取 |
+| 未开放 | 电量读取 |
 | 网络与隐私 | 无账号、遥测或上传；不显示、保存或写入设备序列号 |
 
 ## 下载并同步时间
@@ -33,7 +33,7 @@
 
 ## 为什么功能没有全开？
 
-屏幕时钟已经经过真机验证。基础灯效的写入序列已在实机上取得“报文 → 设备确认 → 效果 → 重连后保留”的证据，但目前只看过静态恒亮和川流不息两种模式，因此标为实验性；写错时可以用键盘的 `Fn+\|` 等快捷键恢复。系统设置、改键和宏同样有实机证据并标为实验性，键盘读不回这三项，但都能写回默认值或清空。屏幕图片/GIF 和电量读取还没有取得同等证据，程序不会猜测 opcode，也不会盲发写入。
+屏幕时钟已经经过真机验证。基础灯效的写入序列已在实机上取得“报文 → 设备确认 → 效果 → 重连后保留”的证据，但目前只看过静态恒亮和川流不息两种模式，因此标为实验性；写错时可以用键盘的 `Fn+\|` 等快捷键恢复。系统设置、改键和宏同样有实机证据并标为实验性，键盘读不回这三项，但都能写回默认值或清空。屏幕 GIF 页上传也已实机验证，断电后保留，按 `Fn+PrtSc` 查看、再按返回主页面；但覆盖后原内容无法恢复（出厂开机动画不受影响）。电量读取还没有取得同等证据，程序不会猜测 opcode，也不会盲发写入。
 
 这是刻意的安全边界，不是界面遗漏。详见 [功能与协议状态](docs/PROTOCOL_STATUS.md) 与 [安全模型](docs/SAFETY_MODEL.md)。
 
