@@ -85,6 +85,8 @@ enum KeyAction: Equatable {
     case key(modifiers: UInt8, usage: UInt8)
     case media(MediaKey)
     case mouse(MouseAction)
+    /// `index` is the macro's 0-based position in the uploaded table.
+    case macro(index: UInt8, playback: MacroPlayback)
 
     /// One 4-byte slot of the 576-byte layer (0x4186d2–0x418bd3).
     var record: [UInt8] {
@@ -102,6 +104,8 @@ enum KeyAction: Equatable {
             return [0x03, key.rawValue, 0x00, 0x00]
         case .mouse(let action):
             return action.record
+        case .macro(let index, let playback):
+            return [0x06, index, playback.mode, playback.count]
         }
     }
 }
@@ -120,7 +124,7 @@ enum KeymapProtocol {
 }
 
 extension KeyAction {
-    private static let modifierBits: [String: UInt8] = [
+    static let modifierBits: [String: UInt8] = [
         "ctrl": 0x01, "control": 0x01,
         "shift": 0x02,
         "alt": 0x04, "opt": 0x04, "option": 0x04,
@@ -143,6 +147,11 @@ extension KeyAction {
             self = .media(key)
             return
         }
+        if text.hasPrefix("macro:") {
+            guard let macro = Self.macro(text.dropFirst(6).split(separator: ":", omittingEmptySubsequences: false)) else { return nil }
+            self = macro
+            return
+        }
         if text.hasPrefix("mouse:") {
             guard let action = MouseAction.allCases.first(where: { "mouse:" + $0.cliName == text }) else { return nil }
             self = .mouse(action)
@@ -163,6 +172,27 @@ extension KeyAction {
         guard let key = KeyboardLayout.key(named: last), key.name != "Fn" else { return nil }
         if modifiers != 0, (0xe0...0xe7).contains(key.usage) { return nil }
         self = .key(modifiers: modifiers, usage: key.usage)
+    }
+}
+
+private extension KeyAction {
+    /// `N`, `N:xK`, `N:toggle` or `N:hold`, with N counted from 1.
+    static func macro(_ parts: [Substring]) -> KeyAction? {
+        guard (1...2).contains(parts.count), let number = Int(parts[0]), (1...MacroProtocol.maxMacros).contains(number) else {
+            return nil
+        }
+        let playback: MacroPlayback
+        switch parts.count == 1 ? "" : parts[1] {
+        case "": playback = .once
+        case "toggle": playback = .untilPressedAgain
+        case "hold": playback = .whileHeld
+        case let option where option.hasPrefix("x"):
+            guard let count = UInt8(option.dropFirst()), count > 0 else { return nil }
+            playback = .times(count)
+        default:
+            return nil
+        }
+        return .macro(index: UInt8(number - 1), playback: playback)
     }
 }
 
@@ -190,6 +220,8 @@ extension KeyAction {
             return "media:" + key.cliName
         case .mouse(let action):
             return "mouse:" + action.cliName
+        case .macro(let index, let playback):
+            return "macro:\(Int(index) + 1)" + playback.suffix
         }
     }
 }

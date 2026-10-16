@@ -80,6 +80,14 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func applyMacros(_ macros: [Macro]) {
+        do {
+            message = try AK35iApplication.applyMacros(macros)
+        } catch {
+            message = "宏写入失败：\(error.localizedDescription)"
+        }
+    }
+
     func resetKeymap() {
         do {
             message = try KeymapLayer.allCases.map { try AK35iApplication.applyKeymap(KeymapRequest(layer: $0)) }.joined(separator: "\n")
@@ -181,7 +189,7 @@ private struct ControlCenterRootView: View {
             case .keymap:
                 KeymapView(model: model)
             case .macros:
-                LockedFeatureView(model: model, feature: .macros)
+                MacroView(model: model)
             }
         }
         .frame(minWidth: 840, minHeight: 560)
@@ -213,7 +221,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置和改键为实验性写入。屏幕与宏在取得实机证据前保持锁定。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键和宏为实验性写入。屏幕在取得实机证据前保持锁定。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -558,6 +566,86 @@ private struct KeymapView: View {
         }
         targetError = nil
         editor.assign(action)
+    }
+}
+
+private struct MacroRow: Identifiable {
+    let id = UUID()
+    var script = ""
+}
+
+private struct MacroView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var rows = [MacroRow()]
+    @State private var confirmsApply = false
+    @State private var confirmsClear = false
+
+    private var capability: AK35iCapability { model.snapshot.capability(.macros) }
+
+    private var parsed: [Result<Macro, Error>] {
+        rows.map { row in Result { try Macro(script: row.script) } }
+    }
+
+    private var macros: [Macro]? {
+        try? parsed.map { try $0.get() }
+    }
+
+    var body: some View {
+        Form {
+            Section("板载宏") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                ForEach($rows) { $row in
+                    let index = rows.firstIndex { $0.id == row.id } ?? 0
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            TextField("宏 \(index + 1)", text: $row.script, prompt: Text("如 Cmd+Space, 100ms, A"))
+                            Button(role: .destructive) { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.borderless)
+                                .disabled(rows.count == 1)
+                        }
+                        switch Result(catching: { try Macro(script: row.script) }) {
+                        case .success(let macro):
+                            Text("macro:\(index + 1) · \(macro.steps.count) 个事件").font(.caption).foregroundStyle(.secondary)
+                        case .failure(let error):
+                            Text(error.localizedDescription).font(.caption).foregroundStyle(.red)
+                        }
+                    }
+                }
+                HStack {
+                    Button("添加宏") { rows.append(MacroRow()) }
+                        .disabled(rows.count >= MacroProtocol.maxMacros)
+                    Button("写入键盘") { confirmsApply = true }
+                        .disabled(capability.state != .experimental || macros == nil)
+                    Button("清空键盘上的宏") { confirmsClear = true }
+                        .disabled(capability.state != .experimental)
+                }
+            }
+            Section("写法") {
+                Text("步骤用逗号分隔：A 点按一个键；+A / -A 只按下或只松开；Cmd+Space 点按组合；mouse:left / mouse:right / mouse:middle 鼠标点击；100ms 设置上一步之后的等待（默认 \(Macro.defaultDelay) ms）。宏结束时所有按下的键都必须松开。")
+                    .foregroundStyle(.secondary)
+                Text("宏要绑定到键才会播放：在“改键”页把某个键设为 macro:N，也可写 macro:N:x3（播放 3 次）、macro:N:toggle（再按停止）、macro:N:hold（按住重复）。")
+                    .foregroundStyle(.secondary)
+                Text("键盘不提供读取宏的命令，这里只显示本次输入的内容。写入会替换键盘上的全部宏。")
+                    .foregroundStyle(.secondary)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("宏")
+        .padding()
+        .alert("将 \(rows.count) 个宏写入键盘？", isPresented: $confirmsApply) {
+            Button("取消", role: .cancel) {}
+            Button("写入") { if let macros { model.applyMacros(macros) } }
+        } message: {
+            Text("实验性功能：替换键盘上的全部宏。")
+        }
+        .alert("清空键盘上的宏？", isPresented: $confirmsClear) {
+            Button("取消", role: .cancel) {}
+            Button("清空") { model.applyMacros([]) }
+        } message: {
+            Text("键盘上的全部宏都会删除；绑定了宏的键将不再播放。")
+        }
     }
 }
 

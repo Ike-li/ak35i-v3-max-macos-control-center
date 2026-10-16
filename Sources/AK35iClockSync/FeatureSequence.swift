@@ -57,7 +57,7 @@ enum FeatureSequenceWriter {
     ) throws -> FeatureSequenceResult {
         var unacknowledged: [Int] = []
         for (index, packet) in packets.enumerated() {
-            sleep(packetDelay)
+            sleep(packetDelay + packet.settleTime)
             try device.writeFeature(packet.report, packetIndex: index + 1)
             guard packet.expectsAck else { continue }
 

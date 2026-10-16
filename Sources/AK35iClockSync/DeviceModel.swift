@@ -188,7 +188,11 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
                 detail: "已在此键盘实机验证普通层 CapsLock→Esc（拔插后保留）和 Fn 层 F1→静音，并能恢复默认。键盘不提供读取，每次写入整层，未列出的键恢复默认；可在改键页或用 CLI ak35i keymap set 写入，ak35i keymap reset --apply 恢复。"
             )
         case .macros:
-            return captureRequired(feature, "宏事件编码与持久化序列尚未验证，当前保持只读。")
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "已在此键盘实机验证：两个宏（单键、Shift 组合）绑定到 F12、F11 后按设置播放（含重复 3 次），拔插后保留，清空宏并恢复改键后复原。键盘不提供读取，每次写入替换全部宏；宏需在改键中绑定为 macro:N 才会播放。可在宏页面或用 CLI ak35i macro set 写入，ak35i macro clear --apply 清空。"
+            )
         }
     }
 
@@ -227,7 +231,9 @@ enum SafetyGate {
             return .notNeeded("设备诊断不修改板载配置。")
         case .keymap:
             return .unavailable("键盘不提供读取命令；ak35i keymap reset --apply 可写回两层默认（与驱动“重置键盘”相同）。")
-        case .battery, .lighting, .macros:
+        case .macros:
+            return .unavailable("键盘不提供读取命令；ak35i macro clear --apply 可清空全部宏。")
+        case .battery, .lighting:
             return .unavailable("此功能尚未取得 V3 Max 的读取与回滚抓包，不能安全备份。")
         }
     }

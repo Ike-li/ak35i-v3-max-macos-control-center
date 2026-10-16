@@ -41,6 +41,7 @@ enum AK35iCommand: Equatable {
     case systemSet(SystemSettings, apply: Bool)
     case keymapSet(KeymapRequest, apply: Bool)
     case keymapReset([KeymapLayer], apply: Bool)
+    case macroSet([Macro], apply: Bool)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -113,10 +114,12 @@ enum AK35iCommandParser {
             return try parseKeymapSet(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["keymap", "reset"]):
             return try parseKeymapReset(Array(values.dropFirst(2)))
+        case let values where values.starts(with: ["macro", "set"]):
+            return try parseMacros(Array(values.dropFirst(2)), allowEmpty: false)
+        case let values where values.starts(with: ["macro", "clear"]):
+            return try parseMacros(Array(values.dropFirst(2)), allowEmpty: true)
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
-        case let values where values.starts(with: ["apply", "macro"]):
-            throw AK35iCommandError.featureRequiresCapture(.macros)
         default:
             throw AK35iCommandError.invalidUsage("未知命令。运行 ak35i --help 查看可用命令。")
         }
@@ -310,6 +313,22 @@ enum AK35iCommandParser {
             }
         }
         return .keymapReset(layers, apply: apply)
+    }
+
+    private static func parseMacros(_ options: [String], allowEmpty: Bool) throws -> AK35iCommand {
+        let apply = options.contains("--apply")
+        let scripts = options.filter { $0 != "--apply" }
+        guard allowEmpty ? scripts.isEmpty : !scripts.isEmpty else {
+            throw AK35iCommandError.invalidUsage("用法：ak35i macro set \"宏1\" [\"宏2\" ...] [--apply]，或 ak35i macro clear [--apply]")
+        }
+        let macros = try scripts.enumerated().map { index, script in
+            do {
+                return try Macro(script: script)
+            } catch {
+                throw AK35iCommandError.invalidUsage("宏 \(index + 1)：\(error.localizedDescription)")
+            }
+        }
+        return .macroSet(macros, apply: apply)
     }
 
     private static func keymapLayer(_ value: String) -> KeymapLayer? {

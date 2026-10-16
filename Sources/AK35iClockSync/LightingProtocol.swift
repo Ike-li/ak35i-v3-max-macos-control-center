@@ -5,6 +5,9 @@ import Foundation
 struct FeaturePacket: Equatable {
     let report: [UInt8]
     let expectsAck: Bool
+    /// Extra wait before this packet where the driver sleeps longer than
+    /// `cmd_delaytime` (the macro upload's two `Sleep(30)` calls).
+    var settleTime: TimeInterval = 0
 }
 
 struct RGBColor: Equatable {

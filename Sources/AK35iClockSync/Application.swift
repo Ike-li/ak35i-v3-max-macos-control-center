@@ -38,6 +38,8 @@ enum AK35iApplication {
             return runKeymapSet(request, apply: apply)
         case .keymapReset(let layers, let apply):
             return runKeymapReset(layers, apply: apply)
+        case .macroSet(let macros, let apply):
+            return runMacroSet(macros, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -80,6 +82,10 @@ enum AK35iApplication {
         print("            media:" + MediaKey.allCases.map(\.cliName).joined(separator: "|"))
         print("            mouse:" + MouseAction.allCases.map(\.cliName).joined(separator: "|"))
         print("  keymap reset [--layer base|fn] [--apply]  把改键恢复为默认（不指定层时两层都恢复）")
+        print("      宏键：macro:N（播放一次）、macro:N:xK（K 次）、macro:N:toggle（再按停止）、macro:N:hold（按住重复）")
+        print("  macro set \"宏1\" [\"宏2\" ...] [--apply]  预览或写入宏（实验性），替换键盘上的全部宏")
+        print("      步骤用逗号分隔：A 点按、+A/-A 按下/松开、Cmd+Space 组合、mouse:left|right|middle、100ms 等待")
+        print("  macro clear [--apply]                清空键盘上的全部宏")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -269,6 +275,47 @@ enum AK35iApplication {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
         }
+    }
+
+    private static func runMacroSet(_ macros: [Macro], apply: Bool) -> Int32 {
+        let packets: [FeaturePacket]
+        do {
+            packets = try MacroProtocol.packets(for: macros)
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+        print(macros.isEmpty ? "清空宏：键盘上的全部宏都会删除。" : "宏：替换键盘上的全部宏（键盘不提供读取）。")
+        for (index, macro) in macros.enumerated() {
+            print("  \(index + 1). \(macro.script)  （\(macro.steps.count) 个事件）")
+        }
+        print("  共 \(packets.count - 3) 个数据块。")
+        if !macros.isEmpty {
+            print("宏需要绑定到键才会播放，例如 ak35i keymap set F12=macro:1 --apply。")
+        }
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+        do {
+            print(try applyMacros(macros))
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    static func applyMacros(_ macros: [Macro]) throws -> String {
+        let packets = try MacroProtocol.packets(for: macros)
+        let transport = try AK35iHIDClockTransport()
+        let result = try FeatureSequenceWriter.send(packets, to: transport)
+        guard result.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(result.unacknowledgedPackets)
+        }
+        return macros.isEmpty
+            ? "已清空键盘上的宏，键盘已确认全部命令。"
+            : "已写入 \(macros.count) 个宏，键盘已确认全部命令。可用 ak35i macro clear --apply 清空。"
     }
 
     static func applyKeymap(_ request: KeymapRequest) throws -> String {
