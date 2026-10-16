@@ -8,6 +8,8 @@ final class ControlCenterModel: ObservableObject {
     @Published private(set) var message = "正在检测 USB 设备…"
     @Published private(set) var autoSyncEnabled = false
     @Published private(set) var isSyncing = false
+    @Published private(set) var isStreaming = false
+    private var liveStop: StopFlag?
 
     let executablePath: String
 
@@ -88,6 +90,34 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func startLive(_ request: LiveRequest) {
+        guard liveStop == nil else { return }
+        let stop = StopFlag()
+        liveStop = stop
+        isStreaming = true
+        message = "正在实时推送灯效…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome: String
+            do {
+                let transport = try AK35iHIDClockTransport()
+                let stats = try AK35iApplication.streamLive(request, to: transport, stop: stop)
+                outcome = "已停止实时灯效：发送 \(stats.sent) 帧，跳过 \(stats.skipped) 帧，平均 \(String(format: "%.1f", stats.framesPerSecond)) 帧/秒。键盘已恢复原灯效。"
+                    + (stats.heardAudio == false ? "整个过程没有收到声音：可能没有在播放，或没有授予系统录音权限。" : "")
+            } catch {
+                outcome = "实时灯效中断：\(error.localizedDescription)"
+            }
+            DispatchQueue.main.async {
+                self.liveStop = nil
+                self.isStreaming = false
+                self.message = outcome
+            }
+        }
+    }
+
+    func stopLive() {
+        liveStop?.stop()
+    }
+
     func resetKeymap() {
         do {
             message = try KeymapLayer.allCases.map { try AK35iApplication.applyKeymap(KeymapRequest(layer: $0)) }.joined(separator: "\n")
@@ -121,6 +151,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
     case lighting
     case perKey
     case system
+    case live
     case screen
     case keymap
     case macros
@@ -135,6 +166,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .lighting: return "灯光"
         case .perKey: return "单键灯光"
         case .system: return "系统设置"
+        case .live: return "实时灯效"
         case .screen: return "屏幕"
         case .keymap: return "改键"
         case .macros: return "宏"
@@ -149,6 +181,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .lighting: return "lightbulb.2"
         case .perKey: return "square.grid.3x3"
         case .system: return "gearshape"
+        case .live: return "sparkles"
         case .screen: return "rectangle.on.rectangle"
         case .keymap: return "command"
         case .macros: return "record.circle"
@@ -184,6 +217,8 @@ private struct ControlCenterRootView: View {
                 PerKeyView(model: model)
             case .system:
                 SystemSettingsView(model: model)
+            case .live:
+                LiveView(model: model)
             case .screen:
                 LockedFeatureView(model: model, feature: .screenUpload)
             case .keymap:
@@ -566,6 +601,74 @@ private struct KeymapView: View {
         }
         targetError = nil
         editor.assign(action)
+    }
+}
+
+private struct LiveView: View {
+    private enum Choice: String, CaseIterable {
+        case wave = "彩虹波浪"
+        case breathing = "呼吸"
+        case starry = "繁星"
+        case solid = "纯色"
+        case music = "音乐律动"
+    }
+
+    @ObservedObject var model: ControlCenterModel
+    @State private var choice = Choice.wave
+    @State private var color = RGBColor(red: 0x00, green: 0x80, blue: 0xff)
+    @State private var speed = 3
+
+    private var request: LiveRequest {
+        switch choice {
+        case .wave: return LiveRequest(effect: .wave, speed: speed)
+        case .breathing: return LiveRequest(effect: .breathing(color), speed: speed)
+        case .starry: return LiveRequest(effect: .starry(color), speed: speed)
+        case .solid: return LiveRequest(effect: .solid(color))
+        case .music: return LiveRequest(effect: .music)
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section("实时灯效") {
+                Text("由这台 Mac 逐帧推送，键盘不保存；停止或离开本页后，键盘立即恢复原来的灯效。效果由本项目设计，与 Windows 驱动的同名效果不同。")
+                    .foregroundStyle(.secondary)
+                Picker("效果", selection: $choice) {
+                    ForEach(Choice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.isStreaming)
+                if choice == .music {
+                    Text("按这台 Mac 正在播放的声音显示频谱：低音在左、高音在右，音量越大亮得越高。需要 macOS 14.2 或更高版本，首次使用会请求系统录音权限；声音不会被录制或保存。")
+                        .foregroundStyle(.secondary)
+                }
+                if choice != .wave && choice != .music {
+                    ColorPicker("颜色", selection: Binding(
+                        get: { color.cgColor },
+                        set: { if let picked = RGBColor(cgColor: $0) { color = picked } }
+                    ), supportsOpacity: false)
+                    .disabled(model.isStreaming)
+                }
+                if choice != .solid && choice != .music {
+                    Picker("速度（1 最慢，5 最快）", selection: $speed) {
+                        ForEach(LiveAnimation.speeds, id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(model.isStreaming)
+                }
+                if model.isStreaming {
+                    Button("停止") { model.stopLive() }
+                } else {
+                    Button("开始") { model.startLive(request) }
+                        .disabled(model.snapshot.connection != .usbWired)
+                }
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("实时灯效")
+        .padding()
+        .onDisappear { model.stopLive() }
     }
 }
 

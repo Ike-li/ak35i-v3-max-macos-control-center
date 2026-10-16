@@ -1,6 +1,9 @@
 import XCTest
 @testable import AK35iClockSync
 
+/// The SDK also exposes QuickDraw's RGBColor.
+private typealias RGBColor = AK35iClockSync.RGBColor
+
 final class FeatureSequenceTests: XCTestCase {
     private func report(_ prefix: [UInt8]) -> [UInt8] {
         [0] + prefix + Array(repeating: 0, count: 64 - prefix.count)
@@ -105,6 +108,42 @@ final class FeatureSequenceTests: XCTestCase {
         XCTAssertThrowsError(try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: 9, from: device, sleep: { _ in })) { error in
             XCTAssertEqual(error as? FeatureSequenceError, .shortRead(chunk: 2))
         }
+    }
+
+    private func frame() -> [FeaturePacket] {
+        RealtimeFrameProtocol.packets(colors: [1: RGBColor(red: 0, green: 0, blue: 0xff)])
+    }
+
+    /// Mirrors 0x44fc90 as used by 0x428110 for every realtime frame.
+    func testStreamsAFrameWithTheDriversShortTiming() throws {
+        let device = FakeFeatureDevice(acknowledging: true)
+        var log: [String] = []
+        device.onEvent = { log.append($0) }
+
+        XCTAssertTrue(try FeatureStreamWriter.sendFrame(frame(), to: device, sleep: { log.append("sleep \($0)") }))
+        XCTAssertEqual(
+            log,
+            ["sleep 0.005", "write 1", "sleep 0.005", "read"]
+                + (2...9).flatMap { ["write \($0)", "sleep 0.002"] }
+                + ["sleep 0.005", "write 10", "sleep 0.005", "read"]
+        )
+    }
+
+    func testSkipsTheFrameWhenTheStartIsNotAcknowledged() throws {
+        let device = FakeFeatureDevice(acknowledging: false)
+
+        XCTAssertFalse(try FeatureStreamWriter.sendFrame(frame(), to: device, sleep: { _ in }))
+        XCTAssertEqual(device.writtenReports.count, 1)
+    }
+
+    func testResendsOnceWhenTheKeyboardReportsBusy() throws {
+        let device = FakeFeatureDevice(acknowledging: true)
+        device.queuedReads = [response([0x04, 0x20, 0x00, 0xff])]
+
+        XCTAssertTrue(try FeatureStreamWriter.sendFrame(frame(), to: device, sleep: { _ in }))
+        XCTAssertEqual(Array(device.writtenReports[0][1...2]), [0x04, 0x20])
+        XCTAssertEqual(Array(device.writtenReports[1][1...2]), [0x04, 0x20])
+        XCTAssertEqual(device.writtenReports.count, 11)
     }
 }
 

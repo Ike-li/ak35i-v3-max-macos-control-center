@@ -2,7 +2,7 @@
 
 [中文](README.md) · [Download](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [Getting started](docs/GETTING_STARTED.md) · [Chinese and English manuals](docs/manuals/) · [Protocol status](docs/PROTOCOL_STATUS.md)
 
-A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes backed by physical-device evidence: the verified screen clock and experimental basic lighting (Lighting page or CLI), per-key colors, system settings, key remapping and macros. All other vendor-HID writes remain locked.
+A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes backed by physical-device evidence: the verified screen clock and experimental basic lighting (Lighting page or CLI), per-key colors, system settings, key remapping, macros, and realtime effects and music visualisation streamed from the Mac. All other vendor-HID writes remain locked.
 
 ## At a glance
 
@@ -10,10 +10,10 @@ A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. T
 |---|---|
 | Verified hardware | AK35i V3 Max, USB VID:PID `0C45:8009` |
 | Verified write | Screen clock sync: UTC+8 or the Mac system time zone |
-| Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors from the Per-key page or `ak35i keys set Esc=FF0000`; system settings (disable Win / Alt+Tab / Alt+F4, sleep, key response, Fn switch) from the System page or `ak35i system set`; key remapping (base and Fn layers) from the Keymap page or `ak35i keymap set CapsLock=Esc`; macros from the Macros page or `ak35i macro set "Cmd+Space, 100ms, A"`, bound to a key with `macro:N` |
+| Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors from the Per-key page or `ak35i keys set Esc=FF0000`; system settings (disable Win / Alt+Tab / Alt+F4, sleep, key response, Fn switch) from the System page or `ak35i system set`; key remapping (base and Fn layers) from the Keymap page or `ak35i keymap set CapsLock=Esc`; macros from the Macros page or `ak35i macro set "Cmd+Space, 100ms, A"`, bound to a key with `macro:N`; realtime effects and music visualisation streamed from the Mac (nothing stored on the keyboard) from the Realtime page or `ak35i live wave` / `ak35i live music` |
 | Connection | USB wired mode only |
 | Release build | Apple Silicon (`arm64`), macOS 13+ |
-| Deliberately locked | Realtime lighting, music rhythm, image/GIF upload, battery reads |
+| Deliberately locked | Image/GIF upload, battery reads |
 | Privacy | No account, telemetry, upload, or device serial-number display/persistence |
 
 ## Quick start

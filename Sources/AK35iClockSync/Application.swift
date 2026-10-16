@@ -40,6 +40,8 @@ enum AK35iApplication {
             return runKeymapReset(layers, apply: apply)
         case .macroSet(let macros, let apply):
             return runMacroSet(macros, apply: apply)
+        case .live(let request):
+            return runLive(request)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -86,6 +88,9 @@ enum AK35iApplication {
         print("  macro set \"宏1\" [\"宏2\" ...] [--apply]  预览或写入宏（实验性），替换键盘上的全部宏")
         print("      步骤用逗号分隔：A 点按、+A/-A 按下/松开、Cmd+Space 组合、mouse:left|right|middle、100ms 等待")
         print("  macro clear [--apply]                清空键盘上的全部宏")
+        print("  live solid|breathing|wave|starry|music [选项]  由电脑实时推送灯效（实验性），Ctrl+C 停止，停止后键盘恢复原灯效")
+        print("      --color RRGGBB（wave、music 除外）  --speed 1-5（solid、music 除外）  --seconds N")
+        print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -304,6 +309,75 @@ enum AK35iApplication {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
         }
+    }
+
+    private static func runLive(_ request: LiveRequest) -> Int32 {
+        let stop = StopFlag()
+        signal(SIGINT, SIG_IGN)
+        let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
+        interrupt.setEventHandler { stop.stop() }
+        interrupt.resume()
+        defer {
+            interrupt.cancel()
+            signal(SIGINT, SIG_DFL)
+        }
+
+        do {
+            let transport = try AK35iHIDClockTransport()
+            print("开始实时推送（每帧至少间隔 \(Int(liveFrameInterval * 1000)) ms），按 Ctrl+C 停止。")
+            let stats = try streamLive(request, to: transport, stop: stop)
+            print("已停止：发送 \(stats.sent) 帧，跳过 \(stats.skipped) 帧（键盘未确认），平均 \(String(format: "%.1f", stats.framesPerSecond)) 帧/秒。")
+            if stats.heardAudio == false {
+                print("整个过程没有收到声音：可能没有在播放，或系统没有授予录音权限（系统设置 › 隐私与安全性 › 屏幕与系统录音）。")
+            }
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    /// The driver's worker loop takes at least 30 ms per frame.
+    static let liveFrameInterval: TimeInterval = 0.033
+
+    static func streamLive(
+        _ request: LiveRequest,
+        to transport: AK35iHIDClockTransport,
+        stop: StopFlag
+    ) throws -> (sent: Int, skipped: Int, framesPerSecond: Double, heardAudio: Bool?) {
+        var audio: AudioSampleSource?
+        var stopAudio: () -> Void = {}
+        if request.effect == .music {
+            guard #available(macOS 14.2, *) else { throw SystemAudioError.unsupportedSystem }
+            let capture = SystemAudioCapture()
+            stopAudio = capture.stop
+            do {
+                try capture.start()
+            } catch {
+                capture.stop()
+                throw error
+            }
+            audio = capture
+        }
+        defer { stopAudio() }
+
+        var animation = LiveAnimation(request: request, audio: audio)
+        let start = Date()
+        var sent = 0
+        var skipped = 0
+        var heardAudio = false
+        while !stop.isStopped {
+            let frameStart = Date()
+            let elapsed = frameStart.timeIntervalSince(start)
+            if let seconds = request.seconds, elapsed >= TimeInterval(seconds) { break }
+            if let audio, !heardAudio { heardAudio = audio.latestSamples().samples.contains { abs($0) > 0.0001 } }
+            let packets = RealtimeFrameProtocol.packets(colors: animation.frame(at: elapsed))
+            if try FeatureStreamWriter.sendFrame(packets, to: transport) { sent += 1 } else { skipped += 1 }
+            let remaining = liveFrameInterval - Date().timeIntervalSince(frameStart)
+            if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
+        }
+        let duration = max(Date().timeIntervalSince(start), 0.001)
+        return (sent, skipped, Double(sent + skipped) / duration, audio == nil ? nil : heardAudio)
     }
 
     static func applyMacros(_ macros: [Macro]) throws -> String {

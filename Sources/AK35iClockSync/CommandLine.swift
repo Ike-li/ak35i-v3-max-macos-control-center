@@ -42,6 +42,7 @@ enum AK35iCommand: Equatable {
     case keymapSet(KeymapRequest, apply: Bool)
     case keymapReset([KeymapLayer], apply: Bool)
     case macroSet([Macro], apply: Bool)
+    case live(LiveRequest)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -118,6 +119,8 @@ enum AK35iCommandParser {
             return try parseMacros(Array(values.dropFirst(2)), allowEmpty: false)
         case let values where values.starts(with: ["macro", "clear"]):
             return try parseMacros(Array(values.dropFirst(2)), allowEmpty: true)
+        case let values where values.first == "live":
+            return try parseLive(Array(values.dropFirst()))
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
         default:
@@ -329,6 +332,44 @@ enum AK35iCommandParser {
             }
         }
         return .macroSet(macros, apply: apply)
+    }
+
+    private static let liveUsage = AK35iCommandError.invalidUsage(
+        "用法：ak35i live solid|breathing|wave|starry|music [--color RRGGBB] [--speed 1-5] [--seconds N]（wave、music 不取颜色，solid、music 不取速度）"
+    )
+
+    private static func parseLive(_ options: [String]) throws -> AK35iCommand {
+        var remaining = options[...]
+        guard let name = remaining.popFirst(), ["solid", "breathing", "wave", "starry", "music"].contains(name) else { throw liveUsage }
+        var color: RGBColor?
+        var request = LiveRequest(effect: .wave)
+        var speedGiven = false
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--color":
+                guard name != "wave", name != "music", color == nil, let value = remaining.popFirst(), let rgb = hexColor(value) else { throw liveUsage }
+                color = rgb
+            case "--speed":
+                guard name != "solid", name != "music", !speedGiven, let value = remaining.popFirst().flatMap({ Int($0) }),
+                      LiveAnimation.speeds.contains(value) else { throw liveUsage }
+                speedGiven = true
+                request.speed = value
+            case "--seconds":
+                guard request.seconds == nil, let value = remaining.popFirst().flatMap({ Int($0) }), value > 0 else { throw liveUsage }
+                request.seconds = value
+            default:
+                throw liveUsage
+            }
+        }
+        let chosen = color ?? RGBColor(red: 0xff, green: 0xff, blue: 0xff)
+        switch name {
+        case "solid": request.effect = .solid(chosen)
+        case "breathing": request.effect = .breathing(chosen)
+        case "starry": request.effect = .starry(chosen)
+        case "music": request.effect = .music
+        default: request.effect = .wave
+        }
+        return .live(request)
     }
 
     private static func keymapLayer(_ value: String) -> KeymapLayer? {
