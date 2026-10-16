@@ -181,6 +181,15 @@ struct LightingEffect: Equatable {
 /// Basic lighting sequence of DeviceDriver.exe 0x42b400.
 enum LightingProtocol {
     static func packets(for effect: LightingEffect) -> [FeaturePacket] {
+        modeSession(data: dataReport(for: effect))
+    }
+
+    /// DeviceDriver.exe 0x42b5a0: the data frame as one 2.4G packet.
+    static func wirelessPacket(for effect: LightingEffect) -> [UInt8] {
+        WirelessProtocol.settings(0x05, frame: Array(dataReport(for: effect).dropFirst()))
+    }
+
+    private static func dataReport(for effect: LightingEffect) -> [UInt8] {
         var data = blankReport()
         data[1] = effect.mode.rawValue
         if effect.mode != .off {
@@ -199,7 +208,7 @@ enum LightingProtocol {
         }
         data[15] = 0xaa
         data[16] = 0x55
-        return modeSession(data: data)
+        return data
     }
 
     /// Per-key custom mode (0x44c4e0): mode 0x80 carrying only the brightness.

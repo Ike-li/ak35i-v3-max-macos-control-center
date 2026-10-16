@@ -45,7 +45,20 @@ enum SystemSettingsProtocol {
     static func packets(for settings: SystemSettings) -> [FeaturePacket] {
         var preamble = LightingProtocol.command(0x17, followingPackets: 1)
         preamble[3] = 0x01
+        return [
+            FeaturePacket(report: LightingProtocol.command(0x18), expectsAck: true),
+            FeaturePacket(report: preamble, expectsAck: true),
+            FeaturePacket(report: dataReport(for: settings), expectsAck: false),
+            FeaturePacket(report: LightingProtocol.command(0x02), expectsAck: true),
+        ]
+    }
 
+    /// DeviceDriver.exe 0x414260: the data frame as one 2.4G packet.
+    static func wirelessPacket(for settings: SystemSettings) -> [UInt8] {
+        WirelessProtocol.settings(0x07, frame: Array(dataReport(for: settings).dropFirst()))
+    }
+
+    private static func dataReport(for settings: SystemSettings) -> [UInt8] {
         var data = [UInt8](repeating: 0, count: ClockProtocol.reportLength)
         data[2] = 0x01
         data[3] = settings.disableAltTab ? 1 : 0
@@ -56,12 +69,6 @@ enum SystemSettingsProtocol {
         data[9] = UInt8(settings.responseLevel)
         data[63] = 0xaa
         data[64] = 0x55
-
-        return [
-            FeaturePacket(report: LightingProtocol.command(0x18), expectsAck: true),
-            FeaturePacket(report: preamble, expectsAck: true),
-            FeaturePacket(report: data, expectsAck: false),
-            FeaturePacket(report: LightingProtocol.command(0x02), expectsAck: true),
-        ]
+        return data
     }
 }

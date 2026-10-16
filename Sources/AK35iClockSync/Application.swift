@@ -69,6 +69,15 @@ enum AK35iApplication {
         return level
     }
 
+    /// Whether commands would go through the 2.4G receiver; only enumerates.
+    private static func isWireless() -> Bool {
+        (try? currentSnapshot().connection) == .wireless
+    }
+
+    private static func printWirelessPacket(_ packet: [UInt8]) {
+        print("  经 2.4G 接收器发送一包：" + packet.prefix(19).map { String(format: "%02X", $0) }.joined(separator: " "))
+    }
+
     /// The cable's control interface when present, otherwise the 2.4G receiver.
     static func currentSnapshot() throws -> AK35iDeviceSnapshot {
         let wired = try AK35iHIDDeviceDiscovery().snapshot()
@@ -157,10 +166,14 @@ enum AK35iApplication {
     private static func runLightingSet(_ effect: LightingEffect, apply: Bool) -> Int32 {
         let packets = LightingProtocol.packets(for: effect)
         print("灯效：\(effect.mode.rawValue) \(effect.mode.displayName)")
-        for (index, packet) in packets.enumerated() {
-            let payload = HIDFeatureReport.macOSPayload(from: packet.report)
-            let bytes = payload.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
-            print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+        if isWireless() {
+            printWirelessPacket(LightingProtocol.wirelessPacket(for: effect))
+        } else {
+            for (index, packet) in packets.enumerated() {
+                let payload = HIDFeatureReport.macOSPayload(from: packet.report)
+                let bytes = payload.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+                print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+            }
         }
         guard apply else {
             print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
@@ -266,10 +279,14 @@ enum AK35iApplication {
         if settings.disableWin && !settings.disableAltF4 {
             print("  注意：实测只禁用 Win 不生效，需同时 --disable-alt-f4 on；键盘背面开关在 Mac 档时禁用 Win 无效。")
         }
-        for (index, packet) in SystemSettingsProtocol.packets(for: settings).enumerated() {
-            let payload = HIDFeatureReport.macOSPayload(from: packet.report)
-            let bytes = payload.prefix(10).map { String(format: "%02X", $0) }.joined(separator: " ")
-            print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+        if isWireless() {
+            printWirelessPacket(SystemSettingsProtocol.wirelessPacket(for: settings))
+        } else {
+            for (index, packet) in SystemSettingsProtocol.packets(for: settings).enumerated() {
+                let payload = HIDFeatureReport.macOSPayload(from: packet.report)
+                let bytes = payload.prefix(10).map { String(format: "%02X", $0) }.joined(separator: " ")
+                print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+            }
         }
         guard apply else {
             print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
@@ -499,6 +516,10 @@ enum AK35iApplication {
     }
 
     static func applySystemSettings(_ settings: SystemSettings) throws -> String {
+        if try currentSnapshot().connection == .wireless {
+            try WirelessSender.send([SystemSettingsProtocol.wirelessPacket(for: settings)], over: AK35iReceiverTransport())
+            return "已经 2.4G 接收器写入系统设置，键盘已应答。不带参数运行 ak35i system set --apply 可恢复驱动默认值。"
+        }
         let transport = try AK35iHIDClockTransport()
         let result = try FeatureSequenceWriter.send(SystemSettingsProtocol.packets(for: settings), to: transport)
         guard result.unacknowledgedPackets.isEmpty else {
@@ -508,6 +529,10 @@ enum AK35iApplication {
     }
 
     static func applyLighting(_ effect: LightingEffect) throws -> String {
+        if try currentSnapshot().connection == .wireless {
+            try WirelessSender.send([LightingProtocol.wirelessPacket(for: effect)], over: AK35iReceiverTransport())
+            return "已经 2.4G 接收器写入灯效「\(effect.mode.displayName)」，键盘已应答。如效果不符，可用 Fn+\\| 切换灯效、Fn+↑/↓ 调亮度恢复。"
+        }
         let transport = try AK35iHIDClockTransport()
         let result = try FeatureSequenceWriter.send(LightingProtocol.packets(for: effect), to: transport)
         guard result.unacknowledgedPackets.isEmpty else {

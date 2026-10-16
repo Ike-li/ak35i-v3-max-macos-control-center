@@ -246,6 +246,18 @@ extension AK35iDeviceSnapshot {
                 state: .experimental,
                 detail: "经 2.4G 接收器发送一包 0C（与 Windows 驱动相同），已在此键盘实测。"
             )
+        case .lighting:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器发送一包 05（与 Windows 驱动相同），已在此键盘实测静态恒亮。可用 Fn+\\| 恢复。"
+            )
+        case .systemSettings:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器发送一包 07（与 Windows 驱动相同），已在此键盘实测禁用 Alt+Tab 和恢复默认。"
+            )
         default:
             return AK35iCapability(
                 feature: feature,
