@@ -232,19 +232,19 @@ private struct LightingView: View {
                     }
                 }
                 if mode.supportsBrightness {
-                    Picker("亮度", selection: $settings.brightness) {
+                    Picker("亮度（0 为熄灭）", selection: $settings.brightness) {
                         ForEach(levels, id: \.self) { Text("\($0)").tag($0) }
                     }
                     .pickerStyle(.segmented)
                 }
                 if mode.supportsSpeed {
-                    Picker("速度", selection: $settings.speed) {
+                    Picker("速度（0 最慢，5 最快）", selection: $settings.speed) {
                         ForEach(levels, id: \.self) { Text("\($0)").tag($0) }
                     }
                     .pickerStyle(.segmented)
                 }
                 if let directions = mode.allowedDirections {
-                    Picker("方向", selection: Binding(
+                    Picker(directions == [0, 1] ? "方向（0 与 1 相反）" : "方向", selection: Binding(
                         get: { directions.contains(settings.direction) ? settings.direction : 0 },
                         set: { settings.direction = $0 }
                     )) {

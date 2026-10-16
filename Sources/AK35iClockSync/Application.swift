@@ -78,6 +78,7 @@ enum AK35iApplication {
             print(String(format: "  %2d  ", mode.rawValue) + name + "  " + (parameters.isEmpty ? "无参数" : parameters.joined(separator: "、")))
         }
         print("未指定的参数使用驱动默认值：亮度 5、速度 3、方向 0、多彩。")
+        print("实测：亮度 0 为熄灭；速度 0 最慢、5 最快；方向 0 与 1 互为反向。")
         return EXIT_SUCCESS
     }
 

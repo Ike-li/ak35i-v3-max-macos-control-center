@@ -38,6 +38,6 @@ See the [getting-started guide](docs/GETTING_STARTED.md), [Chinese and English m
 
 ## Scope and safety
 
-Basic lighting has packet-to-acknowledgement-to-effect-to-persistence evidence from the physical keyboard, but only the static and stream modes have been checked by eye and individual parameter values are unconfirmed, so it stays experimental; the keyboard's own `Fn+\|` shortcuts restore it. Display upload, key mapping, macros, and battery reads still need the same evidence before they can be enabled. The app does not guess opcodes or send unverified vendor commands.
+Basic lighting has packet-to-acknowledgement-to-effect-to-persistence evidence from the physical keyboard, but only the static and stream modes have been checked by eye, so it stays experimental; the keyboard's own `Fn+\|` shortcuts restore it. Display upload, key mapping, macros, and battery reads still need the same evidence before they can be enabled. The app does not guess opcodes or send unverified vendor commands.
 
 This is an independent community project and is not affiliated with AJAZZ. It does not distribute vendor drivers, firmware, images, GIFs, or source code. See [NOTICE.md](NOTICE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
