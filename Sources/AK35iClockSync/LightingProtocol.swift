@@ -196,8 +196,21 @@ enum LightingProtocol {
         }
         data[15] = 0xaa
         data[16] = 0x55
+        return modeSession(data: data)
+    }
 
-        return [
+    /// Per-key custom mode (0x44c4e0): mode 0x80 carrying only the brightness.
+    static func customModePackets(brightness: Int) -> [FeaturePacket] {
+        var data = blankReport()
+        data[1] = 0x80
+        data[10] = UInt8(brightness)
+        data[15] = 0xaa
+        data[16] = 0x55
+        return modeSession(data: data)
+    }
+
+    private static func modeSession(data: [UInt8]) -> [FeaturePacket] {
+        [
             FeaturePacket(report: command(0x18), expectsAck: true),
             FeaturePacket(report: command(0x13, followingPackets: 1), expectsAck: true),
             FeaturePacket(report: data, expectsAck: false),
@@ -206,7 +219,7 @@ enum LightingProtocol {
         ]
     }
 
-    private static func command(_ code: UInt8, followingPackets: UInt8 = 0) -> [UInt8] {
+    static func command(_ code: UInt8, followingPackets: UInt8 = 0) -> [UInt8] {
         var report = blankReport()
         report[1] = 0x04
         report[2] = code

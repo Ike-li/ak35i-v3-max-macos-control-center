@@ -28,6 +28,10 @@ enum AK35iApplication {
             return printLightingModes()
         case .lightingSet(let effect, let apply):
             return runLightingSet(effect, apply: apply)
+        case .perKeyList:
+            return printKeyNames()
+        case .perKeySet(let request, let apply):
+            return runPerKeySet(request, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -59,6 +63,9 @@ enum AK35iApplication {
         print("  light list                           列出 20 种基础灯效及可调参数")
         print("  light set --mode N [选项] [--apply]  预览或写入基础灯效（实验性）")
         print("      --brightness 0-5  --speed 0-5  --direction N  --color RRGGBB | --colorful")
+        print("  keys list                            列出自定义单键灯光可用的键名")
+        print("  keys set 键名=RRGGBB ... [--apply]   预览或写入单键颜色（实验性）")
+        print("      --all RRGGBB  --clear  --brightness 0-5")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -102,6 +109,76 @@ enum AK35iApplication {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
         }
+    }
+
+    private static func printKeyNames() -> Int32 {
+        print("自定义单键灯光键名（不区分大小写）：")
+        let names = KeyboardLayout.keys.map(\.name)
+        for start in stride(from: 0, to: names.count, by: 13) {
+            print("  " + names[start..<min(start + 13, names.count)].joined(separator: " "))
+        }
+        return EXIT_SUCCESS
+    }
+
+    private static func runPerKeySet(_ request: PerKeyColorRequest, apply: Bool) -> Int32 {
+        func hex(_ color: RGBColor) -> String { String(format: "%02X%02X%02X", color.red, color.green, color.blue) }
+        print("自定义单键灯光：亮度 \(request.brightness)")
+        print("  底色：" + (request.clear ? "全部清为黑色" : "键盘当前保存的颜色"))
+        if let all = request.all { print("  全部按键：\(hex(all))") }
+        let named = KeyboardLayout.keys.compactMap { key in request.keys[key.light].map { "\(key.name)=\(hex($0))" } }
+        if !named.isEmpty { print("  " + named.joined(separator: " ")) }
+        print("写入时会先切到自定义单键模式（0x80），读取当前颜色作为底色，写入后再读回核对。")
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+
+        do {
+            print(try applyPerKeyColors(request))
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    static func applyPerKeyColors(_ request: PerKeyColorRequest) throws -> String {
+        let transport = try AK35iHIDClockTransport()
+        let mode = try FeatureSequenceWriter.send(LightingProtocol.customModePackets(brightness: request.brightness), to: transport)
+        guard mode.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(mode.unacknowledgedPackets)
+        }
+
+        Thread.sleep(forTimeInterval: 0.3)
+        let target = request.resolve(stored: try readStoredKeyColors(transport))
+        let write = try FeatureSequenceWriter.send(PerKeyProtocol.writePackets(colors: target), to: transport)
+        guard write.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(write.unacknowledgedPackets)
+        }
+
+        let lit = target.values.filter { $0 != RGBColor(red: 0, green: 0, blue: 0) }.count
+        guard request.brightness > 0 else {
+            return "已写入自定义单键颜色（\(lit) 个按键有颜色），键盘已确认全部命令。亮度为 0 时灯全灭，未做读回核对。"
+        }
+        Thread.sleep(forTimeInterval: 0.3)
+        let mismatched = PerKeyVerification.mismatchedLights(expected: target, readBack: try readStoredKeyColors(transport))
+        guard mismatched.isEmpty else {
+            let names = KeyboardLayout.keys.filter { mismatched.contains($0.light) }.map(\.name)
+            throw PerKeyLightingError.verificationFailed(names)
+        }
+        return "已写入自定义单键颜色（\(lit) 个按键有颜色），键盘已确认全部命令，读回核对一致。可用 Fn+\\| 切回其他灯效。"
+    }
+
+    /// Reads twice: in custom mode the readback is static; differing reads mean
+    /// the keyboard is still showing an animated effect.
+    private static func readStoredKeyColors(_ transport: AK35iHIDClockTransport) throws -> [UInt8: RGBColor] {
+        let first = try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: PerKeyProtocol.chunkCount, from: transport)
+        Thread.sleep(forTimeInterval: 0.3)
+        let second = try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: PerKeyProtocol.chunkCount, from: transport)
+        guard first == second, let colors = PerKeyProtocol.colors(fromBlock: first) else {
+            throw PerKeyLightingError.storedColorsUnstable
+        }
+        return colors
     }
 
     static func applyLighting(_ effect: LightingEffect) throws -> String {
@@ -180,7 +257,7 @@ enum AK35iApplication {
 
     private static func describeBackupSafety() -> Int32 {
         print("备份安全状态：")
-        for feature in [AK35iFeature.clock, .screenUpload, .lighting, .keymap, .macros] {
+        for feature in [AK35iFeature.clock, .screenUpload, .lighting, .perKeyLighting, .keymap, .macros] {
             switch SafetyGate.backupAvailability(for: feature) {
             case .available:
                 print("  \(feature.displayName)：可安全备份")

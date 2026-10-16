@@ -67,6 +67,45 @@ final class FeatureSequenceTests: XCTestCase {
         XCTAssertEqual(device.writtenReports.count, 5)
         XCTAssertEqual(result.unacknowledgedPackets, [4])
     }
+
+    /// Mirrors 0x44ff70 + 0x42b1e0 as run against the keyboard on 2026-10-16.
+    func testReadsAcknowledgedChunksAndClosesWithCommit() throws {
+        let device = FakeFeatureDevice(acknowledging: true)
+        let chunks = (0..<9).map { index in [UInt8](repeating: UInt8(index), count: 64) }
+        device.queuedReads = [response([0x04, 0xf5, 0x00, 0x01])] + chunks
+        var log: [String] = []
+        device.onEvent = { log.append($0) }
+
+        let block = try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: 9, from: device, sleep: { log.append("sleep \($0)") })
+
+        XCTAssertEqual(block, chunks.flatMap { $0 })
+        XCTAssertEqual(
+            log,
+            ["sleep 0.01", "write 1", "sleep 0.005", "read"]
+                + Array(repeating: ["sleep 0.003", "read"], count: 9).flatMap { $0 }
+                + ["sleep 0.035", "write 2", "sleep 0.035", "read"]
+        )
+        XCTAssertEqual(Array(device.writtenReports[1][1...2]), [0x04, 0x02])
+    }
+
+    func testStopsReadingWhenTheRequestIsNotAcknowledged() {
+        let device = FakeFeatureDevice(acknowledging: true)
+        device.queuedReads = [response([0x04, 0xf5, 0x00, 0x00])]
+
+        XCTAssertThrowsError(try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: 9, from: device, sleep: { _ in })) { error in
+            XCTAssertEqual(error as? FeatureSequenceError, .readNotAcknowledged)
+        }
+        XCTAssertEqual(device.writtenReports.count, 1)
+    }
+
+    func testRejectsShortChunks() {
+        let device = FakeFeatureDevice(acknowledging: true)
+        device.queuedReads = [response([0x04, 0xf5, 0x00, 0x01]), response([]), [0x01, 0x02]]
+
+        XCTAssertThrowsError(try FeatureBlockReader.read(request: PerKeyProtocol.readRequest, chunks: 9, from: device, sleep: { _ in })) { error in
+            XCTAssertEqual(error as? FeatureSequenceError, .shortRead(chunk: 2))
+        }
+    }
 }
 
 /// Stands in for the IOKit HID interface: echoes the last command with the
@@ -74,6 +113,8 @@ final class FeatureSequenceTests: XCTestCase {
 private final class FakeFeatureDevice: FeatureReportDevice {
     var onEvent: (String) -> Void = { _ in }
     var unacknowledgedCommands: Set<UInt8> = []
+    /// Scripted responses returned before falling back to the echo.
+    var queuedReads: [[UInt8]] = []
     private(set) var writtenReports: [[UInt8]] = []
     private let acknowledging: Bool
 
@@ -88,6 +129,7 @@ private final class FakeFeatureDevice: FeatureReportDevice {
 
     func readFeature() throws -> [UInt8] {
         onEvent("read")
+        if !queuedReads.isEmpty { return queuedReads.removeFirst() }
         var response = Array(writtenReports.last!.dropFirst())
         let ack = acknowledging && !unacknowledgedCommands.contains(response[1])
         response[3] = ack ? 0x01 : 0x00

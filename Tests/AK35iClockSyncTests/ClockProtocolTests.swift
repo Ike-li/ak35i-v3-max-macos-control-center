@@ -45,6 +45,7 @@ final class ClockProtocolTests: XCTestCase {
         XCTAssertEqual(snapshot.capability(.clock).state, .verified)
         XCTAssertEqual(snapshot.capability(.screenUpload).state, .captureRequired)
         XCTAssertEqual(snapshot.capability(.lighting).state, .experimental)
+        XCTAssertEqual(snapshot.capability(.perKeyLighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.keymap).state, .captureRequired)
         XCTAssertEqual(snapshot.capability(.macros).state, .captureRequired)
     }
@@ -111,6 +112,9 @@ final class ClockProtocolTests: XCTestCase {
             SafetyGate.backupAvailability(for: .clock),
             .notNeeded("时钟同步是一次性写入，不存在可导出的板载时钟配置。")
         )
+        guard case .notNeeded = SafetyGate.backupAvailability(for: .perKeyLighting) else {
+            return XCTFail("per-key colours are read back and merged before every write")
+        }
     }
 
     func testBuildsKnownFirmwareRtcSequence() {

@@ -66,6 +66,7 @@ enum AK35iFeature: String, Codable, CaseIterable, Equatable {
     case clock
     case battery
     case lighting
+    case perKeyLighting
     case screenUpload
     case keymap
     case macros
@@ -76,6 +77,7 @@ enum AK35iFeature: String, Codable, CaseIterable, Equatable {
         case .clock: return "屏幕时钟"
         case .battery: return "电量"
         case .lighting: return "RGB 灯效"
+        case .perKeyLighting: return "自定义单键灯光"
         case .screenUpload: return "屏幕图片与 GIF"
         case .keymap: return "板载改键"
         case .macros: return "板载宏"
@@ -163,6 +165,12 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
                 state: .experimental,
                 detail: "基础灯效已在此键盘实机验证静态恒亮（设备确认、重连后保留），川流不息目测正常；其余模式按静态逆向发送。可在灯光页或用 CLI ak35i light set 写入，可用 Fn+\\| 恢复。"
             )
+        case .perKeyLighting:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "已在此键盘实机验证单键写入（设备确认、读回一致、重连后保留）。写入前读取已保存的颜色并合并；目前仅能用 CLI ak35i keys set 写入，可用 Fn+\\| 切回其他灯效。"
+            )
         case .screenUpload:
             return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")
         case .keymap:
@@ -197,6 +205,8 @@ enum SafetyGate {
         switch feature {
         case .clock:
             return .notNeeded("时钟同步是一次性写入，不存在可导出的板载时钟配置。")
+        case .perKeyLighting:
+            return .notNeeded("写入前会读取键盘已保存的单键颜色并在其上合并，未指定的按键保持不变。")
         case .screenUpload:
             return .unavailable("屏幕内容尚无经验证的硬件读取协议，不能伪造备份。")
         case .diagnostics:

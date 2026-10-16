@@ -36,6 +36,8 @@ enum AK35iCommand: Equatable {
     case autoSync(AutoSyncAction)
     case lightingList
     case lightingSet(LightingEffect, apply: Bool)
+    case perKeyList
+    case perKeySet(PerKeyColorRequest, apply: Bool)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -98,6 +100,10 @@ enum AK35iCommandParser {
             return .lightingList
         case let values where values.starts(with: ["light", "set"]):
             return try parseLightingSet(Array(values.dropFirst(2)))
+        case ["keys", "list"]:
+            return .perKeyList
+        case let values where values.starts(with: ["keys", "set"]):
+            return try parsePerKeySet(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
         case let values where values.starts(with: ["apply", "keymap"]):
@@ -156,6 +162,47 @@ enum AK35iCommandParser {
         guard let mode else { throw lightingUsage }
         let effect = try LightingEffect(mode: mode, brightness: brightness, speed: speed, direction: direction, color: color)
         return .lightingSet(effect, apply: apply)
+    }
+
+    private static let perKeyUsage = AK35iCommandError.invalidUsage(
+        "用法：ak35i keys set [键名=RRGGBB ...] [--all RRGGBB] [--clear] [--brightness 0-5] [--apply]"
+    )
+
+    private static func parsePerKeySet(_ options: [String]) throws -> AK35iCommand {
+        var request = PerKeyColorRequest()
+        var apply = false
+
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--apply":
+                apply = true
+            case "--clear":
+                request.clear = true
+            case "--all":
+                guard request.all == nil, let value = remaining.popFirst(), let rgb = hexColor(value) else { throw perKeyUsage }
+                request.all = rgb
+            case "--brightness":
+                guard let value = remaining.popFirst().flatMap({ Int($0) }) else { throw perKeyUsage }
+                guard LightingEffect.levels.contains(value) else {
+                    throw LightingEffectError.outOfRange(.brightness, value: value, allowed: LightingEffect.levels)
+                }
+                request.brightness = value
+            default:
+                let parts = option.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2, let rgb = hexColor(parts[1]) else { throw perKeyUsage }
+                guard let light = KeyboardLayout.light(named: parts[0]) else {
+                    throw AK35iCommandError.invalidUsage("未知按键 \(parts[0])。运行 ak35i keys list 查看可用键名。")
+                }
+                guard request.keys[light] == nil else {
+                    throw AK35iCommandError.invalidUsage("按键 \(parts[0]) 重复指定。")
+                }
+                request.keys[light] = rgb
+            }
+        }
+
+        guard request.clear || request.all != nil || !request.keys.isEmpty else { throw perKeyUsage }
+        return .perKeySet(request, apply: apply)
     }
 
     private static func hexColor(_ text: String) -> RGBColor? {
