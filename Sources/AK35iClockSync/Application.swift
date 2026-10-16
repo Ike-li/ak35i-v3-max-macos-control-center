@@ -3,6 +3,7 @@ import Foundation
 private struct StatusDocument: Codable {
     let snapshot: AK35iDeviceSnapshot
     let capabilities: [AK35iCapability]
+    let firmware: String?
 }
 
 enum AK35iApplication {
@@ -81,6 +82,25 @@ enum AK35iApplication {
 
     private static func printWirelessPacket(_ packet: [UInt8]) {
         print("  经 2.4G 接收器发送一包：" + packet.prefix(19).map { String(format: "%02X", $0) }.joined(separator: " "))
+    }
+
+    /// What can be learned about the firmware with read-only means: the 2.4G
+    /// probe's information block, the wired USB device version, or the
+    /// Bluetooth module's software revision.
+    static func firmwareDescription(for connection: AK35iConnection) throws -> String? {
+        switch connection {
+        case .wireless:
+            guard let reply = try AK35iReceiverTransport().exchange(WirelessProtocol.probe, timeout: 1),
+                  let info = FirmwareInfo(probeReply: reply) else { return nil }
+            return "主控固件 \(info.versionText)"
+        case .usbWired:
+            // On this keyboard bcdDevice (0x0130) equals the 2.4G information block's version.
+            return FirmwareInfo.usbVersionNumber().map { "主控固件 \(FirmwareInfo.versionText($0))" }
+        case .bluetooth:
+            return "蓝牙模块 \(try BluetoothBattery.moduleSoftwareRevision())"
+        case .disconnected:
+            return nil
+        }
     }
 
     /// The cable's control interface when present, otherwise the 2.4G receiver.
@@ -608,14 +628,16 @@ enum AK35iApplication {
         do {
             let snapshot = try currentSnapshot()
             let capabilities = AK35iFeature.allCases.map(snapshot.capability)
+            let firmware = (try? firmwareDescription(for: snapshot.connection)) ?? nil
             if json {
-                let document = StatusDocument(snapshot: snapshot, capabilities: capabilities)
+                let document = StatusDocument(snapshot: snapshot, capabilities: capabilities, firmware: firmware)
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 print(String(decoding: try encoder.encode(document), as: UTF8.self))
             } else {
                 print("连接：\(snapshot.connection.displayName)")
                 print("设备：\(snapshot.product ?? "AK35i V3 Max")")
+                if let firmware { print("固件：\(firmware)") }
                 print("厂商 HID 通道：")
                 if snapshot.connection == .wireless {
                     print("  2.4G 下经接收器的 0xFF60 接口通信。")

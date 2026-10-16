@@ -7,6 +7,7 @@ final class ControlCenterModel: ObservableObject {
     @Published private(set) var snapshot: AK35iDeviceSnapshot = .disconnected
     @Published private(set) var message = "正在检测 USB 设备…"
     @Published private(set) var autoSyncEnabled = false
+    @Published private(set) var firmware: String?
     @Published private(set) var isSyncing = false
     @Published private(set) var isStreaming = false
     /// Fraction of screen blocks written, or nil when no upload is running.
@@ -37,6 +38,12 @@ final class ControlCenterModel: ObservableObject {
         } catch {
             snapshot = .disconnected
             message = error.localizedDescription
+        }
+        firmware = nil
+        let connection = snapshot.connection
+        DispatchQueue.global(qos: .utility).async {
+            let text = (try? AK35iApplication.firmwareDescription(for: connection)) ?? nil
+            DispatchQueue.main.async { self.firmware = text }
         }
         autoSyncEnabled = AutoSyncLaunchAgentStore().isEnabled()
     }
@@ -291,6 +298,7 @@ private struct OverviewView: View {
             Section("连接") {
                 LabeledContent("状态", value: model.snapshot.connection.displayName)
                 LabeledContent("产品", value: model.snapshot.product ?? "未检测到")
+                LabeledContent("固件", value: model.firmware ?? "—")
                 Button("刷新设备") { model.refresh() }
             }
             Section("厂商 HID 通道") {

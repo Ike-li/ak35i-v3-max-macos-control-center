@@ -44,23 +44,39 @@ enum BluetoothBattery {
     }
 
     static func read(timeout: TimeInterval = 5) throws -> Int {
-        try BluetoothBatteryReader().read(timeout: timeout)
+        let value = try BluetoothCharacteristicReader(service: "180F", characteristic: "2A19").read(timeout: timeout)
+        guard let level = level(from: value) else { throw BluetoothBatteryError.notConnected }
+        return level
+    }
+
+    /// Software Revision of the Bluetooth module (Device Information 0x2A28),
+    /// for example “2024.07.26 SVN0138”; the keyboard's controller firmware is
+    /// not visible over Bluetooth.
+    static func moduleSoftwareRevision(timeout: TimeInterval = 5) throws -> String {
+        let value = try BluetoothCharacteristicReader(service: "180A", characteristic: "2A28").read(timeout: timeout)
+        return String(decoding: value, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
     }
 }
 
-/// Reads Battery Level once from the connected keyboard. The system keeps
-/// its own HID connection; cancelling ours afterwards does not disconnect it.
-private final class BluetoothBatteryReader: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate, @unchecked Sendable {
-    private let batteryService = CBUUID(string: "180F")
-    private let batteryLevel = CBUUID(string: "2A19")
+/// Reads one characteristic once from the connected keyboard. The system
+/// keeps its own HID connection; cancelling ours afterwards does not
+/// disconnect it. Never writes.
+private final class BluetoothCharacteristicReader: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate, @unchecked Sendable {
+    private let service: CBUUID
+    private let characteristic: CBUUID
+
+    init(service: String, characteristic: String) {
+        self.service = CBUUID(string: service)
+        self.characteristic = CBUUID(string: characteristic)
+    }
 
     private let queue = DispatchQueue(label: "dev.ak35i.bluetooth-battery")
     private let finished = DispatchSemaphore(value: 0)
     private var central: CBCentralManager?
     private var keyboard: CBPeripheral?
-    private var result: Result<Int, Error>?
+    private var result: Result<Data, Error>?
 
-    func read(timeout: TimeInterval) throws -> Int {
+    func read(timeout: TimeInterval) throws -> Data {
         queue.sync { central = CBCentralManager(delegate: self, queue: queue) }
         guard finished.wait(timeout: .now() + timeout) == .success else {
             queue.sync { finish(.failure(BluetoothBatteryError.timedOut)) }
@@ -69,7 +85,7 @@ private final class BluetoothBatteryReader: NSObject, CBCentralManagerDelegate, 
         return try queue.sync { result! }.get()
     }
 
-    private func finish(_ outcome: Result<Int, Error>) {
+    private func finish(_ outcome: Result<Data, Error>) {
         guard result == nil else { return }
         result = outcome
         if let keyboard { central?.cancelPeripheralConnection(keyboard) }
@@ -79,7 +95,7 @@ private final class BluetoothBatteryReader: NSObject, CBCentralManagerDelegate, 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            let connected = central.retrieveConnectedPeripherals(withServices: [batteryService])
+            let connected = central.retrieveConnectedPeripherals(withServices: [service])
             guard let keyboard = connected.first(where: { ($0.name ?? "").hasPrefix("AK35i BT") }) else {
                 return finish(.failure(BluetoothBatteryError.notConnected))
             }
@@ -94,7 +110,7 @@ private final class BluetoothBatteryReader: NSObject, CBCentralManagerDelegate, 
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        peripheral.discoverServices([batteryService])
+        peripheral.discoverServices([service])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -102,23 +118,23 @@ private final class BluetoothBatteryReader: NSObject, CBCentralManagerDelegate, 
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard let service = peripheral.services?.first(where: { $0.uuid == batteryService }) else {
+        guard let found = peripheral.services?.first(where: { $0.uuid == service }) else {
             return finish(.failure(error ?? BluetoothBatteryError.notConnected))
         }
-        peripheral.discoverCharacteristics([batteryLevel], for: service)
+        peripheral.discoverCharacteristics([characteristic], for: found)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard let level = service.characteristics?.first(where: { $0.uuid == batteryLevel }) else {
+        guard let wanted = service.characteristics?.first(where: { $0.uuid == characteristic }) else {
             return finish(.failure(error ?? BluetoothBatteryError.notConnected))
         }
-        peripheral.readValue(for: level)
+        peripheral.readValue(for: wanted)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard let value = characteristic.value, let level = BluetoothBattery.level(from: value) else {
+        guard let value = characteristic.value else {
             return finish(.failure(error ?? BluetoothBatteryError.notConnected))
         }
-        finish(.success(level))
+        finish(.success(value))
     }
 }
