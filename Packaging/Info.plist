@@ -2,31 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>zh-Hans</string>
-    <key>CFBundleDisplayName</key>
-    <string>AK35i V3 Max 控制中心</string>
-    <key>CFBundleExecutable</key>
-    <string>ak35i</string>
-    <key>CFBundleIdentifier</key>
-    <string>dev.ak35i.controlcenter</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>AK35i Control Center</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>键盘经蓝牙连接时，读取它的标准电池服务来显示电量；不会修改键盘设置。</string>
-    <key>NSAudioCaptureUsageDescription</key>
-    <string>音乐律动需要读取这台 Mac 正在播放的声音来计算频谱，声音不会被录制或保存。</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleDisplayName</key>
+	<string>AK35i V3 Max 控制中心</string>
+	<key>CFBundleExecutable</key>
+	<string>ak35i</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.ak35i.controlcenter</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>AK35i Control Center</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>音乐律动需要读取这台 Mac 正在播放的声音来计算频谱，声音不会被录制或保存。</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>键盘经蓝牙连接时，读取它的标准电池服务来显示电量；不会修改键盘设置。</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>
