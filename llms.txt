@@ -1,0 +1,27 @@
+# AK35i Control Center
+
+> Unofficial native macOS app and command-line tool (`ak35i`) for the AJAZZ AK35i V3 Max tri-mode mechanical keyboard with a TFT screen (USB VID:PID 0C45:8009). It replaces the Windows-only vendor driver on a Mac: RGB lighting modes, per-key colours, system settings, key remapping (base and Fn layers), macros, screen clock sync, screen GIF upload, battery level, and the driver's realtime lighting effects and music visualiser. Works over USB and the 2.4G receiver; over Bluetooth only the battery can be read. Swift 6 / SwiftUI, macOS 13+, MIT licence, not affiliated with AJAZZ.
+
+Most technical documents are written in Chinese.
+
+## Use the app
+
+- [README (English)](README.en.md): features, compatibility, install, FAQ
+- [README (中文)](README.md): the same in Chinese
+- [Latest release](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases/latest): universal DMG, not notarized (allow it once under System Settings › Privacy & Security)
+- [Getting started (中文)](docs/GETTING_STARTED.md): install, first launch, connection modes, permissions, CLI
+- [Troubleshooting (中文)](docs/TROUBLESHOOTING.md)
+- [Keyboard manual index](docs/manuals/README.md): hardware shortcuts in Chinese and English
+
+## Protocol and reverse engineering
+
+- [Feature and protocol status (中文)](docs/PROTOCOL_STATUS.md): what each feature sends and how far it is verified on hardware
+- [Reverse-engineering notes (中文)](docs/STATIC_REVERSING.md): HID commands of the AK35i V3 Max (64-byte Feature reports on usage page 0xFF13: `04 13` lighting, `04 23` / `04 F5` per-key colours, `04 17` system settings, `04 11` / `04 27` keymap, `04 19` / `04 15` macros, `04 72` screen upload with the image data on usage page 0xFF68, `04 20` realtime frames), the 2.4G receiver's 32-byte packets, firmware notes, and the driver's realtime-effect and music algorithms
+- [Safety model (中文)](docs/SAFETY_MODEL.md): only packets reproduced from the vendor driver are sent
+- [Driver provenance (中文)](docs/DRIVER_PROVENANCE.md): which vendor package was analysed
+
+## Code
+
+- [Sources](Sources/AK35iClockSync/): app, CLI and protocol encoders in one Swift module
+- [Tests](Tests/AK35iClockSyncTests/): XCTest, `swift test --disable-sandbox`
+- [AGENTS.md](AGENTS.md): build, test and safety rules for coding agents

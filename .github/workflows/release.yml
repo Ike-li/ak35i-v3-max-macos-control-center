@@ -32,4 +32,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             dist/AK35i-Control-Center-*-universal.dmg \
             dist/AK35i-Control-Center-*-universal.dmg.sha256 \
-            --draft --title "${GITHUB_REF_NAME}" --generate-notes
+            --draft --title "AK35i Control Center ${GITHUB_REF_NAME#v} for macOS" --generate-notes
