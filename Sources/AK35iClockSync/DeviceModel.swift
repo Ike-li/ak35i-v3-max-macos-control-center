@@ -160,7 +160,7 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
                     : "未找到 0xFF13 时钟控制接口。"
             )
         case .battery:
-            return captureRequired(feature, "产品支持电量显示；读取命令须以 V3 Max 抓包验证后启用。")
+            return captureRequired(feature, "有线 USB 下键盘不提供电量（Windows 驱动和固件分析一致），请看键盘屏幕。只有经 2.4G 接收器连接时能读，尚未实现。")
         case .lighting:
             return AK35iCapability(
                 feature: feature,
