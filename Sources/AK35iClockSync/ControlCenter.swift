@@ -7,10 +7,17 @@ final class ControlCenterModel: ObservableObject {
     @Published private(set) var snapshot: AK35iDeviceSnapshot = .disconnected
     @Published private(set) var message = "正在检测 USB 设备…"
     @Published private(set) var autoSyncEnabled = false
+    /// The 2.4G receiver, through which only the battery can be read.
+    @Published private(set) var receiverAttached = false
     @Published private(set) var isSyncing = false
     @Published private(set) var isStreaming = false
     /// Fraction of screen blocks written, or nil when no upload is running.
     @Published private(set) var screenProgress: Double?
+    /// Last reading through the 2.4G receiver, cleared when a read fails.
+    @Published private(set) var battery: Int?
+    @Published private(set) var batteryReadAt: Date?
+    @Published private(set) var batteryError: String?
+    private var isReadingBattery = false
     private var liveStop: StopFlag?
 
     let executablePath: String
@@ -27,6 +34,10 @@ final class ControlCenterModel: ObservableObject {
         } catch {
             snapshot = .disconnected
             message = error.localizedDescription
+        }
+        receiverAttached = AK35iReceiverTransport.isAttached()
+        if snapshot.connection == .disconnected && receiverAttached {
+            message = "已连接 2.4G 接收器：只能读取电量；其它功能需要用数据线连接并切到 USB 模式。"
         }
         autoSyncEnabled = AutoSyncLaunchAgentStore().isEnabled()
     }
@@ -144,6 +155,26 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func readBattery() {
+        guard !isReadingBattery else { return }
+        isReadingBattery = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try AK35iApplication.readBattery() }
+            DispatchQueue.main.async {
+                self.isReadingBattery = false
+                switch result {
+                case .success(let level):
+                    self.battery = level
+                    self.batteryReadAt = Date()
+                    self.batteryError = nil
+                case .failure(let error):
+                    self.battery = nil
+                    self.batteryError = error.localizedDescription
+                }
+            }
+        }
+    }
+
     func stopLive() {
         liveStop?.stop()
     }
@@ -240,7 +271,7 @@ private struct ControlCenterRootView: View {
             case .clock:
                 ClockView(model: model)
             case .battery:
-                LockedFeatureView(model: model, feature: .battery)
+                BatteryView(model: model)
             case .lighting:
                 LightingView(model: model)
             case .perKey:
@@ -267,8 +298,13 @@ private struct OverviewView: View {
     var body: some View {
         Form {
             Section("连接") {
-                LabeledContent("状态", value: model.snapshot.connection.displayName)
-                LabeledContent("产品", value: model.snapshot.product ?? "未检测到")
+                if model.snapshot.connection == .disconnected && model.receiverAttached {
+                    LabeledContent("状态", value: "2.4G 接收器已连接（仅电量）")
+                    LabeledContent("产品", value: AK35iReceiverTransport.productName)
+                } else {
+                    LabeledContent("状态", value: model.snapshot.connection.displayName)
+                    LabeledContent("产品", value: model.snapshot.product ?? "未检测到")
+                }
                 Button("刷新设备") { model.refresh() }
             }
             Section("厂商 HID 通道") {
@@ -286,7 +322,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。电量读取在取得实机证据前保持锁定。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。电量经 2.4G 接收器只读读取。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -917,25 +953,48 @@ private struct KeyCap: View {
     }
 }
 
-private struct LockedFeatureView: View {
+private struct BatteryView: View {
     @ObservedObject var model: ControlCenterModel
-    let feature: AK35iFeature
+
+    private func symbol(_ level: Int) -> String {
+        switch level {
+        case 88...: return "battery.100percent"
+        case 63...: return "battery.75percent"
+        case 38...: return "battery.50percent"
+        case 13...: return "battery.25percent"
+        default: return "battery.0percent"
+        }
+    }
 
     var body: some View {
-        let capability = model.snapshot.capability(feature)
-        VStack(spacing: 14) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text("\(feature.displayName)尚未开放")
-                .font(.title2)
-            Text(capability.detail)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 440)
+        Form {
+            Section("电量") {
+                if let level = model.battery {
+                    LabeledContent("当前电量") { Label("\(level)%", systemImage: symbol(level)) }
+                    if let date = model.batteryReadAt {
+                        LabeledContent("读取时间", value: date.formatted(date: .omitted, time: .standard))
+                    }
+                } else if let error = model.batteryError {
+                    Text(error).foregroundStyle(.secondary)
+                } else {
+                    Text("正在读取…").foregroundStyle(.secondary)
+                }
+                Button("立即读取") { model.readBattery() }
+            }
+            Section("说明") {
+                Text("电量经键盘的 2.4G 接收器读取，与 Windows 驱动相同：本页打开时每 15 秒读一次，只发送读取请求，不修改键盘设置。用数据线连接时键盘不提供电量，请看键盘屏幕上的电量格。")
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle(feature.displayName)
+        .formStyle(.grouped)
+        .navigationTitle("电量")
+        .padding()
+        .task {
+            while !Task.isCancelled {
+                model.readBattery()
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+            }
+        }
     }
 }
 

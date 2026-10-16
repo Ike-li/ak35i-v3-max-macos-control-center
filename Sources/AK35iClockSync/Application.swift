@@ -44,9 +44,29 @@ enum AK35iApplication {
             return runLive(request)
         case .screenSet(let source, let preview, let apply):
             return runScreenSet(source, preview: preview, apply: apply)
+        case .battery:
+            do {
+                print("电量：\(try readBattery())%")
+                return EXIT_SUCCESS
+            } catch {
+                fputs("错误：\(error.localizedDescription)\n", stderr)
+                return EXIT_FAILURE
+            }
         case .gui:
             return EXIT_SUCCESS
         }
+    }
+
+    /// The keyboard's battery percentage through the 2.4G receiver.
+    static func readBattery() throws -> Int {
+        let receiver = try AK35iReceiverTransport()
+        guard let reply = try receiver.exchange(BatteryProtocol.request) else {
+            throw BatteryError.noReply
+        }
+        guard let level = BatteryProtocol.level(from: reply) else {
+            throw BatteryError.invalidReply(reply)
+        }
+        return level
     }
 
     static func syncClock(timeZone: ClockTimeZone) throws -> String {
@@ -93,6 +113,8 @@ enum AK35iApplication {
         print("  live solid|breathing|wave|starry|music [选项]  由电脑实时推送灯效（实验性），Ctrl+C 停止，停止后键盘恢复原灯效")
         print("      --color RRGGBB（wave、music 除外）  --speed 1-5（solid、music 除外）  --seconds N")
         print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
+        print("  battery")
+        print("      经 2.4G 接收器读取键盘电量（有线 USB 下键盘不提供电量）")
         print("  screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
         print("      预览或上传屏幕动画（实验性），缩放到 240×135，最多 141 帧；覆盖屏幕 GIF 页，无法读回")
         print("      屏幕为 16:9，建议用 16:9 的图片（如 1920×1080）；其他比例等比缩小并留黑边")

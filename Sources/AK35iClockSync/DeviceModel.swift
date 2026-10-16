@@ -160,7 +160,11 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
                     : "未找到 0xFF13 时钟控制接口。"
             )
         case .battery:
-            return captureRequired(feature, "有线 USB 下键盘不提供电量（Windows 驱动和固件分析一致），请看键盘屏幕。只有经 2.4G 接收器连接时能读，尚未实现。")
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器只读读取，已在此键盘实测（应答 20 01 00 加百分比）。有线 USB 下键盘不提供电量。"
+            )
         case .lighting:
             return AK35iCapability(
                 feature: feature,
@@ -208,10 +212,6 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         default: return .unknown
         }
     }
-
-    private func captureRequired(_ feature: AK35iFeature, _ detail: String) -> AK35iCapability {
-        AK35iCapability(feature: feature, state: .captureRequired, detail: detail)
-    }
 }
 
 enum BackupAvailability: Equatable {
@@ -237,7 +237,9 @@ enum SafetyGate {
             return .unavailable("键盘不提供读取命令；ak35i keymap reset --apply 可写回两层默认（与驱动“重置键盘”相同）。")
         case .macros:
             return .unavailable("键盘不提供读取命令；ak35i macro clear --apply 可清空全部宏。")
-        case .battery, .lighting:
+        case .battery:
+            return .notNeeded("读电量只发送读取请求，不修改板载配置。")
+        case .lighting:
             return .unavailable("此功能尚未取得 V3 Max 的读取与回滚抓包，不能安全备份。")
         }
     }

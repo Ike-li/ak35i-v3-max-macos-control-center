@@ -44,6 +44,7 @@ enum AK35iCommand: Equatable {
     case macroSet([Macro], apply: Bool)
     case live(LiveRequest)
     case screenSet(ScreenSource, preview: String?, apply: Bool)
+    case battery
 }
 
 enum ScreenSource: Equatable {
@@ -90,6 +91,8 @@ enum AK35iCommandParser {
                 throw AK35iCommandError.invalidUsage("用法：ak35i preview time [--utc8]")
             }
             return .previewTime(timeZone: parsedTimeZone(options))
+        case ["battery"]:
+            return .battery
         case ["backup"]:
             return .backup
         case ["restore"]:

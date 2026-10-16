@@ -1,0 +1,38 @@
+import Foundation
+
+enum BatteryError: LocalizedError {
+    case noReply
+    case invalidReply([UInt8])
+
+    var errorDescription: String? {
+        switch self {
+        case .noReply:
+            return "接收器没有转回键盘的应答：键盘可能没开机、没拨到 2.4G 档，或没和这个接收器配对。"
+        case .invalidReply(let reply):
+            return "键盘应答无法识别：" + reply.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
+        }
+    }
+}
+
+/// Battery query of DeviceDriver.exe 0x435ea0, which the driver only sends
+/// through the 2.4G receiver: `20 01` in a 32-byte Output report whose last
+/// byte is the sum of the others (0x4501c0). The keyboard echoes `20 01 00`
+/// and puts the percentage shown on its screen in byte 3 (firmware 0x6B74).
+/// Over wired USB the keyboard does not report its battery at all.
+enum BatteryProtocol {
+    static let reportLength = 32
+
+    static let request: [UInt8] = {
+        var report = [UInt8](repeating: 0, count: reportLength)
+        report[0] = 0x20
+        report[1] = 0x01
+        report[reportLength - 1] = report.reduce(0, &+)
+        return report
+    }()
+
+    /// The percentage, or nil for a reply the driver would not accept.
+    static func level(from reply: [UInt8]) -> Int? {
+        guard reply.count > 3, Array(reply[0...2]) == Array(request[0...2]), reply[3] != 0 else { return nil }
+        return min(Int(reply[3]), 100)
+    }
+}
