@@ -392,9 +392,8 @@ enum AK35iApplication {
         }
 
         do {
-            let transport = try AK35iHIDClockTransport()
             print("开始实时推送（每帧至少间隔 \(Int(liveFrameInterval * 1000)) ms），按 Ctrl+C 停止。")
-            let stats = try streamLive(request, to: transport, stop: stop)
+            let stats = try streamLive(request, stop: stop)
             print("已停止：发送 \(stats.sent) 帧，跳过 \(stats.skipped) 帧（键盘未确认），平均 \(String(format: "%.1f", stats.framesPerSecond)) 帧/秒。")
             if stats.heardAudio == false {
                 print("整个过程没有收到声音：可能没有在播放，或系统没有授予录音权限（系统设置 › 隐私与安全性 › 屏幕与系统录音）。")
@@ -409,11 +408,23 @@ enum AK35iApplication {
     /// The driver's worker loop takes at least 30 ms per frame.
     static let liveFrameInterval: TimeInterval = 0.033
 
-    static func streamLive(
-        _ request: LiveRequest,
-        to transport: AK35iHIDClockTransport,
-        stop: StopFlag
-    ) throws -> (sent: Int, skipped: Int, framesPerSecond: Double, heardAudio: Bool?) {
+    /// Per-key frames over the cable; over 2.4G only music, as column heights.
+    private enum LiveLink {
+        case wired(AK35iHIDClockTransport)
+        case wireless(AK35iReceiverTransport)
+    }
+
+    static func streamLive(_ request: LiveRequest, stop: StopFlag) throws -> (sent: Int, skipped: Int, framesPerSecond: Double, heardAudio: Bool?) {
+        let link: LiveLink
+        if try currentSnapshot().connection == .wireless {
+            guard request.effect == .music else { throw WirelessError.musicOnly }
+            let receiver = try AK35iReceiverTransport()
+            try WirelessSender.send([], over: receiver)
+            link = .wireless(receiver)
+        } else {
+            link = .wired(try AK35iHIDClockTransport())
+        }
+
         var audio: AudioSampleSource?
         var stopAudio: () -> Void = {}
         if request.effect == .music {
@@ -440,8 +451,15 @@ enum AK35iApplication {
             let elapsed = frameStart.timeIntervalSince(start)
             if let seconds = request.seconds, elapsed >= TimeInterval(seconds) { break }
             if let audio, !heardAudio { heardAudio = audio.latestSamples().samples.contains { abs($0) > 0.0001 } }
-            let packets = RealtimeFrameProtocol.packets(colors: animation.frame(at: elapsed))
-            if try FeatureStreamWriter.sendFrame(packets, to: transport) { sent += 1 } else { skipped += 1 }
+            let delivered: Bool
+            switch link {
+            case .wired(let transport):
+                delivered = try FeatureStreamWriter.sendFrame(RealtimeFrameProtocol.packets(colors: animation.frame(at: elapsed)), to: transport)
+            case .wireless(let receiver):
+                let packet = MusicBarsProtocol.packet(heights: MusicBarsProtocol.heights(bands: animation.musicBands()))
+                delivered = try receiver.exchange(packet, timeout: 0.1) != nil
+            }
+            if delivered { sent += 1 } else { skipped += 1 }
             let remaining = liveFrameInterval - Date().timeIntervalSince(frameStart)
             if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
         }

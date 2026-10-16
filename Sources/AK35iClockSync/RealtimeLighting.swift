@@ -135,9 +135,14 @@ struct LiveAnimation {
                 return color.scaled(sin(Double.pi * (time - start) / life))
             }
         case .music:
-            let (samples, sampleRate) = audio?.latestSamples() ?? ([], 48_000)
-            return MusicVisualizer.frame(bands: meter.update(analyzer.bands(samples: samples, sampleRate: sampleRate)))
+            return MusicVisualizer.frame(bands: musicBands())
         }
+    }
+
+    /// Band levels of the latest audio, falling smoothly.
+    mutating func musicBands() -> [Double] {
+        let (samples, sampleRate) = audio?.latestSamples() ?? ([], 48_000)
+        return meter.update(analyzer.bands(samples: samples, sampleRate: sampleRate))
     }
 
     private static func fill(_ color: (KeyboardKey) -> RGBColor) -> [UInt8: RGBColor] {

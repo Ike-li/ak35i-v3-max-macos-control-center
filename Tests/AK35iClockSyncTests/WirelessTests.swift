@@ -137,6 +137,30 @@ final class WirelessTests: XCTestCase {
         }
     }
 
+    /// DeviceDriver.exe 0x4330b0; firmware 0x6A18 lights P[6..23] rows from
+    /// the bottom of 18 columns in palette colours P[3] / P[4].
+    func testMusicBarsAreOnePacketOfColumnHeights() {
+        let heights = [0, 1, 2, 3, 4, 5, 6, 6, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2]
+        let packet = MusicBarsProtocol.packet(heights: heights)
+        XCTAssertEqual(Array(packet[0...5]), [0x0b, 0x1c, 0x00, 0x01, 0x00, 0x00])
+        XCTAssertEqual(packet[6..<24].map(Int.init), heights)
+        XCTAssertTrue(packet[24..<31].allSatisfy { $0 == 0 })
+        XCTAssertEqual(packet[31], checksum(packet))
+        XCTAssertEqual(MusicBarsProtocol.packet(heights: Array(repeating: 9, count: 18), foreground: 7, background: 6)[3...6].map { $0 }, [7, 6, 0, 6])
+    }
+
+    func testSpreadsSixteenBandsOverEighteenColumns() {
+        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 1, count: 16)), Array(repeating: 6, count: 18))
+        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0, count: 16)), Array(repeating: 0, count: 18))
+        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0.5, count: 16)), Array(repeating: 3, count: 18))
+        // Half a row of headroom, as on the wired visualiser.
+        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0.07, count: 16)), Array(repeating: 0, count: 18))
+        let bass = MusicBarsProtocol.heights(bands: [1] + Array(repeating: 0, count: 15))
+        XCTAssertEqual(bass.first, 6, "low frequencies on the left")
+        XCTAssertEqual(bass.dropFirst().filter { $0 > 0 }.count, 0)
+        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0, count: 15) + [1]).last, 6)
+    }
+
     func testReceiverSnapshotOffersOnlyWhatWorksOverTwoPointFourGigahertz() {
         let snapshot = AK35iDeviceSnapshot.wireless
         XCTAssertEqual(snapshot.connection, .wireless)

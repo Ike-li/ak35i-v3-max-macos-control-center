@@ -4,6 +4,7 @@ enum WirelessError: LocalizedError, Equatable {
     case keyboardOffline
     case noReply(packet: Int, of: Int)
     case noReadback
+    case musicOnly
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ enum WirelessError: LocalizedError, Equatable {
             return "第 \(packet)/\(total) 包没有收到键盘应答，已停止发送，之前的包已写入键盘。"
         case .noReadback:
             return "2.4G 下键盘不提供读回，读不到已保存的单键颜色；请用数据线连接后读取。"
+        case .musicOnly:
+            return "2.4G 下键盘只支持音乐律动（柱状图），波浪、呼吸、繁星和纯色需要用数据线连接。"
         }
     }
 }

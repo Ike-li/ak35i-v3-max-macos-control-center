@@ -92,3 +92,29 @@ enum MusicVisualizer {
         })
     }
 }
+
+/// 2.4G music frame of DeviceDriver.exe 0x4330b0. The keyboard has no
+/// per-key realtime frame over 2.4G; firmware 0x6A18 instead lights 18
+/// columns from the bottom row up, P[6..23] rows each (0–6), in palette
+/// colours: P[3] for lit cells and P[4] for the rest. Palette 0 is off and
+/// 1 a gradient by row (0x0F826). P[5], the driver's background brightness,
+/// is stored but never read.
+enum MusicBarsProtocol {
+    static let columns = 18
+    static let rows = 6
+
+    static func packet(heights: [Int], foreground: UInt8 = 1, background: UInt8 = 0) -> [UInt8] {
+        let bars = heights.prefix(columns).map { UInt8(min(max($0, 0), rows)) }
+        return WirelessProtocol.packet(0x0b, length: 0x1c, data: [foreground, background, 0] + bars)
+    }
+
+    /// Each column takes the band under its centre, with half a row of
+    /// headroom like the wired visualiser.
+    static func heights(bands: [Double]) -> [Int] {
+        (0..<columns).map { column in
+            let band = Int((Double(column) + 0.5) / Double(columns) * Double(bands.count))
+            let level = bands.isEmpty ? 0 : bands[min(band, bands.count - 1)]
+            return min(max(Int(level * Double(rows) + 0.5), 0), rows)
+        }
+    }
+}
