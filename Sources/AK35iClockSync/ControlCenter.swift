@@ -64,6 +64,14 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func applySystemSettings(_ settings: SystemSettings) {
+        do {
+            message = try AK35iApplication.applySystemSettings(settings)
+        } catch {
+            message = "系统设置写入失败：\(error.localizedDescription)"
+        }
+    }
+
     func setAutoSync(_ enabled: Bool) {
         do {
             let store = AutoSyncLaunchAgentStore()
@@ -88,6 +96,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
     case battery
     case lighting
     case perKey
+    case system
     case screen
     case keymap
     case macros
@@ -101,6 +110,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .battery: return "电量"
         case .lighting: return "灯光"
         case .perKey: return "单键灯光"
+        case .system: return "系统设置"
         case .screen: return "屏幕"
         case .keymap: return "改键"
         case .macros: return "宏"
@@ -114,6 +124,7 @@ private enum ControlCenterPage: String, CaseIterable, Identifiable {
         case .battery: return "battery.75percent"
         case .lighting: return "lightbulb.2"
         case .perKey: return "square.grid.3x3"
+        case .system: return "gearshape"
         case .screen: return "rectangle.on.rectangle"
         case .keymap: return "command"
         case .macros: return "record.circle"
@@ -147,6 +158,8 @@ private struct ControlCenterRootView: View {
                 LightingView(model: model)
             case .perKey:
                 PerKeyView(model: model)
+            case .system:
+                SystemSettingsView(model: model)
             case .screen:
                 LockedFeatureView(model: model, feature: .screenUpload)
             case .keymap:
@@ -184,7 +197,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效为实验性写入。屏幕、用户灯效、改键与宏在取得实机证据前保持锁定。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光和系统设置为实验性写入。屏幕、改键与宏在取得实机证据前保持锁定。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -301,6 +314,60 @@ private struct LightingView: View {
             Button("写入") { model.applyLighting(settings) }
         } message: {
             Text("实验性功能：将写入「\(mode.displayName)」并保存到键盘。")
+        }
+    }
+}
+
+private struct SystemSettingsView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var settings = SystemSettings()
+    @State private var confirmsApply = false
+
+    private var capability: AK35iCapability { model.snapshot.capability(.systemSettings) }
+
+    var body: some View {
+        Form {
+            Section("系统设置") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                Toggle("禁用 Win 键", isOn: $settings.disableWin)
+                Toggle("禁用 Alt+Tab", isOn: $settings.disableAltTab)
+                Toggle("禁用 Alt+F4", isOn: $settings.disableAltF4)
+                Text("实测：只开「禁用 Win 键」不生效，需同时开「禁用 Alt+F4」；键盘背面开关在 Mac 档时禁用 Win 无效。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("休眠时间", selection: $settings.sleep) {
+                    ForEach(SleepTimeout.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Picker("按键响应（档位越低延迟越小，过低可能连击）", selection: $settings.responseLevel) {
+                    ForEach(SystemSettings.responseLevels, id: \.self) { Text("\($0) 档").tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Fn 开关（含义为推断）", selection: $settings.fnSwitch) {
+                    Text("0 使用单键").tag(0)
+                    Text("1 使用组合键").tag(1)
+                }
+                .pickerStyle(.segmented)
+                HStack {
+                    Button("写入键盘") { confirmsApply = true }
+                        .disabled(capability.state != .experimental)
+                    Button("表单恢复默认值") { settings = SystemSettings() }
+                }
+            }
+            Section("说明") {
+                Text("键盘不提供读取命令，这里显示的是驱动默认值，不是键盘当前的设置。每次写入都会覆盖全部六项。")
+                    .foregroundStyle(.secondary)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("系统设置")
+        .padding()
+        .alert("将系统设置写入键盘？", isPresented: $confirmsApply) {
+            Button("取消", role: .cancel) {}
+            Button("写入") { model.applySystemSettings(settings) }
+        } message: {
+            Text("实验性功能：将按表单覆盖键盘上全部六项系统设置。")
         }
     }
 }

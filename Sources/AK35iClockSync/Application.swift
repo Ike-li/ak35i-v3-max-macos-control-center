@@ -32,6 +32,8 @@ enum AK35iApplication {
             return printKeyNames()
         case .perKeySet(let request, let apply):
             return runPerKeySet(request, apply: apply)
+        case .systemSet(let settings, let apply):
+            return runSystemSet(settings, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -66,6 +68,9 @@ enum AK35iApplication {
         print("  keys list                            列出自定义单键灯光可用的键名")
         print("  keys set 键名=RRGGBB ... [--apply]   预览或写入单键颜色（实验性）")
         print("      --all RRGGBB  --clear  --brightness 0-5")
+        print("  system set [选项] [--apply]          预览或写入系统设置（实验性），未指定的项按驱动默认值")
+        print("      --sleep never|1m|5m|30m  --response 1-5  --fn-switch 0|1")
+        print("      --disable-win on|off  --disable-alt-tab on|off  --disable-alt-f4 on|off")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -191,6 +196,44 @@ enum AK35iApplication {
         return colors
     }
 
+    private static func runSystemSet(_ settings: SystemSettings, apply: Bool) -> Int32 {
+        func onOff(_ disabled: Bool) -> String { disabled ? "禁用" : "不禁用" }
+        print("系统设置（键盘不提供读取，未指定的项按驱动默认值写入）：")
+        print("  休眠时间：\(settings.sleep.displayName)")
+        print("  按键响应：\(settings.responseLevel) 档")
+        print("  Fn 开关：\(settings.fnSwitch)（推断 0 为使用单键、1 为使用组合键）")
+        print("  Win 键：\(onOff(settings.disableWin))  Alt+Tab：\(onOff(settings.disableAltTab))  Alt+F4：\(onOff(settings.disableAltF4))")
+        if settings.disableWin && !settings.disableAltF4 {
+            print("  注意：实测只禁用 Win 不生效，需同时 --disable-alt-f4 on；键盘背面开关在 Mac 档时禁用 Win 无效。")
+        }
+        for (index, packet) in SystemSettingsProtocol.packets(for: settings).enumerated() {
+            let payload = HIDFeatureReport.macOSPayload(from: packet.report)
+            let bytes = payload.prefix(10).map { String(format: "%02X", $0) }.joined(separator: " ")
+            print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+        }
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+
+        do {
+            print(try applySystemSettings(settings))
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    static func applySystemSettings(_ settings: SystemSettings) throws -> String {
+        let transport = try AK35iHIDClockTransport()
+        let result = try FeatureSequenceWriter.send(SystemSettingsProtocol.packets(for: settings), to: transport)
+        guard result.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(result.unacknowledgedPackets)
+        }
+        return "已写入系统设置，键盘已确认全部命令。不带参数运行 ak35i system set --apply 可恢复驱动默认值。"
+    }
+
     static func applyLighting(_ effect: LightingEffect) throws -> String {
         let transport = try AK35iHIDClockTransport()
         let result = try FeatureSequenceWriter.send(LightingProtocol.packets(for: effect), to: transport)
@@ -267,7 +310,7 @@ enum AK35iApplication {
 
     private static func describeBackupSafety() -> Int32 {
         print("备份安全状态：")
-        for feature in [AK35iFeature.clock, .screenUpload, .lighting, .perKeyLighting, .keymap, .macros] {
+        for feature in [AK35iFeature.clock, .screenUpload, .lighting, .perKeyLighting, .systemSettings, .keymap, .macros] {
             switch SafetyGate.backupAvailability(for: feature) {
             case .available:
                 print("  \(feature.displayName)：可安全备份")

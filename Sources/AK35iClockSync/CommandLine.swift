@@ -38,6 +38,7 @@ enum AK35iCommand: Equatable {
     case lightingSet(LightingEffect, apply: Bool)
     case perKeyList
     case perKeySet(PerKeyColorRequest, apply: Bool)
+    case systemSet(SystemSettings, apply: Bool)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -104,6 +105,8 @@ enum AK35iCommandParser {
             return .perKeyList
         case let values where values.starts(with: ["keys", "set"]):
             return try parsePerKeySet(Array(values.dropFirst(2)))
+        case let values where values.starts(with: ["system", "set"]):
+            return try parseSystemSet(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
         case let values where values.starts(with: ["apply", "keymap"]):
@@ -203,6 +206,47 @@ enum AK35iCommandParser {
 
         guard request.clear || request.all != nil || !request.keys.isEmpty else { throw perKeyUsage }
         return .perKeySet(request, apply: apply)
+    }
+
+    private static let systemUsage = AK35iCommandError.invalidUsage(
+        "用法：ak35i system set [--sleep never|1m|5m|30m] [--response 1-5] [--disable-win on|off] [--disable-alt-tab on|off] [--disable-alt-f4 on|off] [--fn-switch 0|1] [--apply]"
+    )
+
+    private static func parseSystemSet(_ options: [String]) throws -> AK35iCommand {
+        var settings = SystemSettings()
+        var apply = false
+        var seen: Set<String> = []
+
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            if option == "--apply" {
+                apply = true
+                continue
+            }
+            guard seen.insert(option).inserted, let value = remaining.popFirst() else { throw systemUsage }
+            switch option {
+            case "--sleep":
+                guard let sleep = SleepTimeout.allCases.first(where: { $0.cliName == value }) else { throw systemUsage }
+                settings.sleep = sleep
+            case "--response":
+                guard let level = Int(value), SystemSettings.responseLevels.contains(level) else { throw systemUsage }
+                settings.responseLevel = level
+            case "--fn-switch":
+                guard let fn = Int(value), [0, 1].contains(fn) else { throw systemUsage }
+                settings.fnSwitch = fn
+            case "--disable-win", "--disable-alt-tab", "--disable-alt-f4":
+                guard ["on", "off"].contains(value) else { throw systemUsage }
+                let disabled = value == "on"
+                switch option {
+                case "--disable-win": settings.disableWin = disabled
+                case "--disable-alt-tab": settings.disableAltTab = disabled
+                default: settings.disableAltF4 = disabled
+                }
+            default:
+                throw systemUsage
+            }
+        }
+        return .systemSet(settings, apply: apply)
     }
 
     private static func hexColor(_ text: String) -> RGBColor? {
