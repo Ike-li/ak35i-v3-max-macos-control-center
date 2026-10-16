@@ -3,6 +3,7 @@ import Foundation
 enum WirelessError: LocalizedError, Equatable {
     case keyboardOffline
     case noReply(packet: Int, of: Int)
+    case noReadback
 
     var errorDescription: String? {
         switch self {
@@ -10,6 +11,8 @@ enum WirelessError: LocalizedError, Equatable {
             return "2.4G 接收器已连接，但键盘没有应答：请确认键盘已开机、拨到 2.4G 档，并和这个接收器配对。"
         case .noReply(let packet, let total):
             return "第 \(packet)/\(total) 包没有收到键盘应答，已停止发送，之前的包已写入键盘。"
+        case .noReadback:
+            return "2.4G 下键盘不提供读回，读不到已保存的单键颜色；请用数据线连接后读取。"
         }
     }
 }
@@ -39,6 +42,17 @@ enum WirelessProtocol {
     /// 0x414260 build them.
     static func settings(_ command: UInt8, frame: [UInt8]) -> [UInt8] {
         packet(command, length: 0x10, data: Array(frame.prefix(14)) + [0xaa, 0x55])
+    }
+
+    /// A block in 28-byte packets numbered from 0, the last carrying what is
+    /// left, as the driver streams keymaps (0x418e30) and colours (0x44ca60).
+    /// The firmware writes each to base + 28 × sequence with no upper bound,
+    /// so callers keep blocks inside their flash page.
+    static func stream(_ command: UInt8, data: [UInt8]) -> [[UInt8]] {
+        stride(from: 0, to: data.count, by: dataLength).map { start in
+            let chunk = Array(data[start..<min(start + dataLength, data.count)])
+            return packet(command, length: UInt8(chunk.count), sequence: UInt8(start / dataLength), data: chunk)
+        }
     }
 }
 

@@ -153,6 +153,17 @@ enum PerKeyProtocol {
     /// Lights missing from `colors` are written black, as the driver does for
     /// keys outside the selected scheme.
     static func writePackets(colors: [UInt8: RGBColor]) -> [FeaturePacket] {
+        BlockUpload.packets(opcode: 0x23, block: block(colors))
+    }
+
+    /// DeviceDriver.exe 0x44ca60: custom mode, then the block as 21 × `14`.
+    /// Nothing can be read back over 2.4G.
+    static func wirelessPackets(colors: [UInt8: RGBColor], brightness: Int) -> [[UInt8]] {
+        [LightingProtocol.wirelessCustomModePacket(brightness: brightness)]
+            + WirelessProtocol.stream(0x14, data: BlockUpload.sealed(block(colors)))
+    }
+
+    private static func block(_ colors: [UInt8: RGBColor]) -> [UInt8] {
         var block = [UInt8](repeating: 0, count: blockLength)
         for key in KeyboardLayout.keys {
             let slot = 4 * Int(key.light)
@@ -162,7 +173,7 @@ enum PerKeyProtocol {
             block[slot + 2] = color.green
             block[slot + 3] = color.blue
         }
-        return BlockUpload.packets(opcode: 0x23, block: block)
+        return block
     }
 
     static func colors(fromBlock block: [UInt8]) -> [UInt8: RGBColor]? {

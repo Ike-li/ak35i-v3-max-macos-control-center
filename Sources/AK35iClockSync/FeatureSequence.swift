@@ -79,10 +79,16 @@ enum BlockUpload {
     static let chunkCount = 9
     static let blockLength = chunkCount * 64
 
-    static func packets(opcode: UInt8, block: [UInt8]) -> [FeaturePacket] {
+    /// The block with `AA 55` in its last two bytes.
+    static func sealed(_ block: [UInt8]) -> [UInt8] {
         var block = block
         block[blockLength - 2] = 0xaa
         block[blockLength - 1] = 0x55
+        return block
+    }
+
+    static func packets(opcode: UInt8, block: [UInt8]) -> [FeaturePacket] {
+        let block = sealed(block)
         let chunks = (0..<chunkCount).map { index in
             FeaturePacket(report: [0] + block[index * 64..<(index + 1) * 64], expectsAck: false)
         }

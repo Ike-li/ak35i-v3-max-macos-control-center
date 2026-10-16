@@ -205,7 +205,11 @@ enum AK35iApplication {
         if let all = request.all { print("  全部按键：\(hex(all))") }
         let named = KeyboardLayout.keys.compactMap { key in request.keys[key.light].map { "\(key.name)=\(hex($0))" } }
         if !named.isEmpty { print("  " + named.joined(separator: " ")) }
-        print("写入时会先切到自定义单键模式（0x80），读取当前颜色作为底色，写入后再读回核对。")
+        if isWireless() {
+            print("经 2.4G 写入：先切到自定义单键模式（0x80），再发 21 包颜色；2.4G 下读不回颜色，未指定的按键写为黑色。")
+        } else {
+            print("写入时会先切到自定义单键模式（0x80），读取当前颜色作为底色，写入后再读回核对。")
+        }
         guard apply else {
             print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
             return EXIT_SUCCESS
@@ -222,12 +226,19 @@ enum AK35iApplication {
 
     /// Stored colours are only readable in custom mode, so reading switches to it.
     static func readPerKeyColors(brightness: Int) throws -> [UInt8: RGBColor] {
+        if try currentSnapshot().connection == .wireless { throw WirelessError.noReadback }
         let transport = try AK35iHIDClockTransport()
         try switchToCustomMode(brightness: brightness, transport)
         return try readStoredKeyColors(transport)
     }
 
     static func applyPerKeyColors(_ request: PerKeyColorRequest) throws -> String {
+        if try currentSnapshot().connection == .wireless {
+            let target = request.resolve(stored: [:])
+            try WirelessSender.send(PerKeyProtocol.wirelessPackets(colors: target, brightness: request.brightness), over: AK35iReceiverTransport())
+            let lit = target.values.filter { $0 != RGBColor(red: 0, green: 0, blue: 0) }.count
+            return "已经 2.4G 接收器写入自定义单键颜色（\(lit) 个按键有颜色），键盘已逐包应答。2.4G 下读不回颜色，未指定的按键写为黑色。可用 Fn+\\| 切回其他灯效。"
+        }
         let transport = try AK35iHIDClockTransport()
         try switchToCustomMode(brightness: request.brightness, transport)
         let target = request.resolve(stored: try readStoredKeyColors(transport))
@@ -340,9 +351,10 @@ enum AK35iApplication {
     }
 
     private static func runMacroSet(_ macros: [Macro], apply: Bool) -> Int32 {
-        let packets: [FeaturePacket]
+        let wireless = isWireless()
+        let count: Int
         do {
-            packets = try MacroProtocol.packets(for: macros)
+            count = wireless ? try MacroProtocol.wirelessPackets(for: macros).count : try MacroProtocol.packets(for: macros).count - 3
         } catch {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
@@ -351,7 +363,7 @@ enum AK35iApplication {
         for (index, macro) in macros.enumerated() {
             print("  \(index + 1). \(macro.script)  （\(macro.steps.count) 个事件）")
         }
-        print("  共 \(packets.count - 3) 个数据块。")
+        print(wireless ? "  经 2.4G 共 \(count) 包。" : "  共 \(count) 个数据块。")
         if !macros.isEmpty {
             print("宏需要绑定到键才会播放，例如 ak35i keymap set F12=macro:1 --apply。")
         }
@@ -494,6 +506,12 @@ enum AK35iApplication {
     }
 
     static func applyMacros(_ macros: [Macro]) throws -> String {
+        if try currentSnapshot().connection == .wireless {
+            try WirelessSender.send(try MacroProtocol.wirelessPackets(for: macros), over: AK35iReceiverTransport())
+            return macros.isEmpty
+                ? "已经 2.4G 接收器清空键盘上的宏，键盘已逐包应答。"
+                : "已经 2.4G 接收器写入 \(macros.count) 个宏，键盘已逐包应答。可用 ak35i macro clear --apply 清空。"
+        }
         let packets = try MacroProtocol.packets(for: macros)
         let transport = try AK35iHIDClockTransport()
         let result = try FeatureSequenceWriter.send(packets, to: transport)
@@ -506,12 +524,16 @@ enum AK35iApplication {
     }
 
     static func applyKeymap(_ request: KeymapRequest) throws -> String {
+        let changed = request.assignments.values.filter { $0 != .defaultKey }.count
+        if try currentSnapshot().connection == .wireless {
+            try WirelessSender.send(KeymapProtocol.wirelessPackets(layer: request.layer, assignments: request.assignments), over: AK35iReceiverTransport())
+            return "已经 2.4G 接收器写入\(request.layer.displayName)（\(changed) 个键改动，其余为默认），键盘已逐包应答。可用 ak35i keymap reset --apply 恢复默认。"
+        }
         let transport = try AK35iHIDClockTransport()
         let result = try FeatureSequenceWriter.send(KeymapProtocol.packets(layer: request.layer, assignments: request.assignments), to: transport)
         guard result.unacknowledgedPackets.isEmpty else {
             throw FeatureSequenceError.packetsNotAcknowledged(result.unacknowledgedPackets)
         }
-        let changed = request.assignments.values.filter { $0 != .defaultKey }.count
         return "已写入\(request.layer.displayName)（\(changed) 个键改动，其余为默认），键盘已确认全部命令。可用 ak35i keymap reset --apply 恢复默认。"
     }
 

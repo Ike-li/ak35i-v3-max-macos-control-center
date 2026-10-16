@@ -11,6 +11,14 @@ enum KeymapLayer: CaseIterable, Equatable {
         }
     }
 
+    /// 2.4G stream commands (firmware 0x6AD8 / 0x6B0C).
+    var wirelessCommand: UInt8 {
+        switch self {
+        case .base: return 0x10
+        case .fn: return 0x12
+        }
+    }
+
     var displayName: String {
         switch self {
         case .base: return "普通层"
@@ -114,12 +122,22 @@ enum KeyAction: Equatable {
 /// whole layer, so keys missing from `assignments` revert to their default.
 enum KeymapProtocol {
     static func packets(layer: KeymapLayer, assignments: [UInt8: KeyAction]) -> [FeaturePacket] {
+        BlockUpload.packets(opcode: layer.opcode, block: block(assignments))
+    }
+
+    /// DeviceDriver.exe 0x418e30: the same block in 21 packets. Unlike the
+    /// driver, an empty layer is still sent, as the wired path does.
+    static func wirelessPackets(layer: KeymapLayer, assignments: [UInt8: KeyAction]) -> [[UInt8]] {
+        WirelessProtocol.stream(layer.wirelessCommand, data: BlockUpload.sealed(block(assignments)))
+    }
+
+    private static func block(_ assignments: [UInt8: KeyAction]) -> [UInt8] {
         var block = [UInt8](repeating: 0, count: BlockUpload.blockLength)
         for (index, action) in assignments {
             let slot = 4 * Int(index)
             block.replaceSubrange(slot..<slot + 4, with: action.record)
         }
-        return BlockUpload.packets(opcode: layer.opcode, block: block)
+        return block
     }
 }
 

@@ -439,6 +439,8 @@ CLI `ak35i live` 按此时序推送（每帧至少间隔 33 ms，macOS 上实际
 
 **2.4G 灯效与系统设置**：`ak35i light set --mode 1 --color 00FF00 --brightness 5 --apply` 发一包 `05 10 00 01 00 FF 00 … 05 03 … AA 55`，收到回显，用户确认全键常亮绿色。系统设置用只记录 Alt 和 Tab 的按键记录器（匹配接收器 `05AC:024F`）在 Win 档验证：写入前按 Alt+Tab，记录到 Alt 和 Tab；发一包 `07` 禁用 Alt+Tab 后，只记录到 Alt；不带参数写回默认后，Tab 恢复。记录在试验后删除。
 
+**2.4G 改键、宏、单键颜色**：`ak35i macro set "X, Y, Z"` 发 17 包 `09`，`keymap set A=B F12=macro:1` 和 `keymap set F1=media:mute --layer fn` 各发 21 包 `10` / `12`，每包都收到回显。用户确认按 A 打出 b、F12 打出 xyz、Fn+F1 切换静音；连接开关拨走再拨回 2.4G 后 A 仍打出 b。`keys set Esc=FF0000 W=00FF00` 先发 `05 … 80`，再发 21 包 `14`，用户确认只有 Esc 红、W 绿，其余熄灭。随后 `keymap reset` 和 `macro clear` 经 2.4G 写回，用户确认 A、F12、Fn+F1 恢复原行为。
+
 注意：本机还插着罗技接收器（`046D:C539`），它有一个用途页 `0xFF00`、输出同样为 32 字节的接口。`IOHIDManagerSetDeviceMatchingMultiple` 按产品名匹配时没有生效，返回了全部 HID 设备，第一次试验因“发现 2 个候选接口”被拦下，没有发出报文。现在的做法是先按用途页 `0xFF60`、用途 `0x61` 匹配，再在代码里核对产品名或 VID:PID 以及报告长度。
 
 ## 当前边界

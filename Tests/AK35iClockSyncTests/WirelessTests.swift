@@ -69,15 +69,81 @@ final class WirelessTests: XCTestCase {
         XCTAssertEqual(packet[31], checksum(packet))
     }
 
+    /// The data carried by a stream, in order, and each packet's header.
+    private func streamed(_ packets: [[UInt8]]) -> (headers: [[UInt8]], data: [UInt8]) {
+        (packets.map { Array($0[0...2]) }, packets.flatMap { $0[3..<31] })
+    }
+
+    private func wiredBlock(_ packets: [FeaturePacket]) -> [UInt8] {
+        packets.dropFirst(2).filter { !$0.expectsAck }.flatMap { $0.report.dropFirst() }
+    }
+
+    /// DeviceDriver.exe 0x418e30; firmware 0x6AD8 / 0x6B0C write P[3..30] to
+    /// 0x9400 / 0xAC00 + 28 × P[2], erasing the page at its first byte.
+    func testKeymapLayersStreamTheWiredBlockInTwentyOnePackets() {
+        let assignments: [UInt8: KeyAction] = [3: .disabled, 30: .media(.mute)]
+        for (layer, command) in [(KeymapLayer.base, UInt8(0x10)), (.fn, 0x12)] {
+            let packets = KeymapProtocol.wirelessPackets(layer: layer, assignments: assignments)
+            let (headers, data) = streamed(packets)
+            XCTAssertEqual(packets.count, 21)
+            XCTAssertLessThanOrEqual(packets.count * 28, 1024, "stays inside one flash page")
+            XCTAssertEqual(headers.first, [command, 0x1c, 0])
+            XCTAssertEqual(headers.last, [command, 0x10, 20])
+            XCTAssertEqual(Array(data.prefix(576)), wiredBlock(KeymapProtocol.packets(layer: layer, assignments: assignments)))
+            XCTAssertTrue(data.dropFirst(576).allSatisfy { $0 == 0 })
+            XCTAssertTrue(packets.allSatisfy { $0[31] == checksum($0) })
+        }
+    }
+
+    /// DeviceDriver.exe 0x44ca60: custom mode first, then 21 × `14` into 0x9C00.
+    func testPerKeyColoursSwitchToCustomModeThenStreamTheWiredBlock() {
+        let colors: [UInt8: RGBColor] = [1: RGBColor(red: 0xff, green: 0, blue: 0)]
+        let packets = PerKeyProtocol.wirelessPackets(colors: colors, brightness: 4)
+        XCTAssertEqual(packets.count, 22)
+        XCTAssertEqual(Array(packets[0][0...18]), [0x05, 0x10, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0xaa, 0x55])
+        let (headers, data) = streamed(Array(packets.dropFirst()))
+        XCTAssertEqual(headers.first, [0x14, 0x1c, 0])
+        XCTAssertEqual(headers.last, [0x14, 0x10, 20])
+        XCTAssertEqual(Array(data.prefix(576)), wiredBlock(PerKeyProtocol.writePackets(colors: colors)))
+    }
+
+    /// DeviceDriver.exe 0x42e0f0: the wired table in 28-byte slices, with the
+    /// driver's packet count rule, AA 55 at the end and E mod 28 as the last length.
+    func testMacrosStreamTheWiredTable() throws {
+        let macro = Macro(steps: [MacroStep(event: .keyDown(0x04), delay: 50), MacroStep(event: .keyUp(0x04), delay: 0)])
+        let packets = try MacroProtocol.wirelessPackets(for: [macro])
+        let (headers, data) = streamed(packets)
+        // E = 0x190 + 8 + 16 = 424 = 15 × 28 + 4, so 15 + 2 packets.
+        XCTAssertEqual(packets.count, 17)
+        XCTAssertEqual(headers.first, [0x09, 0x1c, 0])
+        XCTAssertEqual(headers.last, [0x09, UInt8(424 % 28), 16])
+        XCTAssertEqual(Array(data[474...475]), [0xaa, 0x55])
+        XCTAssertEqual(Array(data.prefix(424)), Array(wiredBlock(try MacroProtocol.packets(for: [macro])).prefix(424)))
+        XCTAssertEqual(data.dropFirst(424).filter { $0 != 0 }, [0xaa, 0x55])
+
+        XCTAssertEqual(try MacroProtocol.wirelessPackets(for: []).count, 400 / 28 + 2)
+    }
+
+    /// Packet 110 would reach 0xAC00 and erase the Fn layer, so the table may
+    /// end at most at 3024 bytes (109 packets) although the wired limit is higher.
+    func testRefusesMacroTablesThatWouldSpillIntoTheFnLayer() throws {
+        func macro(steps: Int) -> Macro {
+            Macro(steps: (0..<steps).map { MacroStep(event: $0 % 2 == 0 ? .keyDown(0x04) : .keyUp(0x04), delay: 10) })
+        }
+        XCTAssertEqual(try MacroProtocol.wirelessPackets(for: [macro(steps: 327)]).count, 109)
+        XCTAssertNoThrow(try MacroProtocol.packets(for: [macro(steps: 328)]))
+        XCTAssertThrowsError(try MacroProtocol.wirelessPackets(for: [macro(steps: 328)])) { error in
+            XCTAssertEqual(error as? MacroError, .tooLargeForWireless(bytes: 3032))
+        }
+    }
+
     func testReceiverSnapshotOffersOnlyWhatWorksOverTwoPointFourGigahertz() {
         let snapshot = AK35iDeviceSnapshot.wireless
         XCTAssertEqual(snapshot.connection, .wireless)
-        for feature in [AK35iFeature.clock, .battery, .lighting, .systemSettings] {
+        for feature in [AK35iFeature.clock, .battery, .lighting, .systemSettings, .perKeyLighting, .keymap, .macros] {
             XCTAssertEqual(snapshot.capability(feature).state, .experimental, "\(feature)")
         }
-        for feature in [AK35iFeature.perKeyLighting, .screenUpload, .keymap, .macros] {
-            XCTAssertEqual(snapshot.capability(feature).state, .notConnected, "\(feature)")
-        }
+        XCTAssertEqual(snapshot.capability(.screenUpload).state, .notConnected)
     }
 
     func testWritesNothingWhenTheKeyboardDoesNotAnswer() {

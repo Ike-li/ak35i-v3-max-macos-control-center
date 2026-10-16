@@ -213,12 +213,20 @@ enum LightingProtocol {
 
     /// Per-key custom mode (0x44c4e0): mode 0x80 carrying only the brightness.
     static func customModePackets(brightness: Int) -> [FeaturePacket] {
+        modeSession(data: customModeReport(brightness: brightness))
+    }
+
+    static func wirelessCustomModePacket(brightness: Int) -> [UInt8] {
+        WirelessProtocol.settings(0x05, frame: Array(customModeReport(brightness: brightness).dropFirst()))
+    }
+
+    private static func customModeReport(brightness: Int) -> [UInt8] {
         var data = blankReport()
         data[1] = 0x80
         data[10] = UInt8(brightness)
         data[15] = 0xaa
         data[16] = 0x55
-        return modeSession(data: data)
+        return data
     }
 
     private static func modeSession(data: [UInt8]) -> [FeaturePacket] {

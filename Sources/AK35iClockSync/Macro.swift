@@ -69,6 +69,7 @@ enum MacroPlayback: Equatable {
 enum MacroError: LocalizedError, Equatable {
     case tooManyMacros(Int)
     case tooManyEvents(events: Int, macros: Int)
+    case tooLargeForWireless(bytes: Int)
 
     var errorDescription: String? {
         switch self {
@@ -76,6 +77,8 @@ enum MacroError: LocalizedError, Equatable {
             return "宏表最多 \(MacroProtocol.maxMacros) 个宏，当前 \(count) 个。"
         case .tooManyEvents(let events, let macros):
             return "宏太长：\(events) 个事件加 \(macros) 个宏超过驱动上限（两者之和最多 \(MacroProtocol.maxUnits)）。"
+        case .tooLargeForWireless(let bytes):
+            return "宏表有 \(bytes) 字节，经 2.4G 最多 \(MacroProtocol.maxWirelessTableEnd) 字节（再多会写进 Fn 层改键的存储区）。请减少事件，或用数据线连接后写入。"
         }
     }
 }
@@ -88,8 +91,52 @@ enum MacroProtocol {
     static let maxUnits = 0xa8c / 8
     private static let tableStart = 0x190
     private static let bufferLength = 0xe00
+    /// Firmware 0x69E4 writes 2.4G packets to 0xA000 + 28 × sequence and
+    /// erases each 1 KB page it reaches; packet 110 would reach the Fn layer
+    /// at 0xAC00, so at most 109 packets, which a table ending at 3024 fills.
+    static let maxWirelessPackets = 109
+    static let maxWirelessTableEnd = 3024
 
     static func packets(for macros: [Macro]) throws -> [FeaturePacket] {
+        var (buffer, offset) = try table(for: macros)
+        let chunkCount = offset / 64 + (offset % 64 == 0 ? 1 : 2)
+        let length = chunkCount * 64
+        buffer[length - 2] = 0xaa
+        buffer[length - 1] = 0x55
+
+        let chunks = (0..<chunkCount).map { index in
+            FeaturePacket(report: [0] + buffer[index * 64..<(index + 1) * 64], expectsAck: false)
+        }
+        return [
+            FeaturePacket(report: LightingProtocol.command(0x19), expectsAck: true),
+            FeaturePacket(report: LightingProtocol.command(0x15, followingPackets: UInt8(chunkCount)), expectsAck: true),
+        ] + chunks + [
+            // The driver waits 35 ms after the last chunk plus Sleep(30).
+            FeaturePacket(report: LightingProtocol.command(0x02), expectsAck: true, settleTime: 0.065),
+        ]
+    }
+
+    /// DeviceDriver.exe 0x42e0f0: the same table in 28-byte packets, with the
+    /// wired chunk-count rule, AA 55 at the end and E mod 28 as the last length.
+    static func wirelessPackets(for macros: [Macro]) throws -> [[UInt8]] {
+        var (buffer, end) = try table(for: macros)
+        guard end <= maxWirelessTableEnd else { throw MacroError.tooLargeForWireless(bytes: end) }
+        let count = end / 28 + (end % 28 == 0 ? 1 : 2)
+        precondition(count <= maxWirelessPackets)
+        buffer[count * 28 - 2] = 0xaa
+        buffer[count * 28 - 1] = 0x55
+        return (0..<count).map { index in
+            WirelessProtocol.packet(
+                0x09,
+                length: index == count - 1 ? UInt8(end % 28) : 0x1c,
+                sequence: UInt8(index),
+                data: Array(buffer[index * 28..<(index + 1) * 28])
+            )
+        }
+    }
+
+    /// The table of 0x42db70 and where it ends.
+    private static func table(for macros: [Macro]) throws -> (buffer: [UInt8], end: Int) {
         let events = macros.reduce(0) { $0 + $1.steps.count }
         guard macros.count <= maxMacros else { throw MacroError.tooManyMacros(macros.count) }
         guard 8 * (events + macros.count) <= 0xa8c else {
@@ -115,22 +162,7 @@ enum MacroProtocol {
             buffer.replaceSubrange(offset + 8..<offset + 8 + entries.count, with: entries)
             offset += 8 + entries.count
         }
-
-        let chunkCount = offset / 64 + (offset % 64 == 0 ? 1 : 2)
-        let length = chunkCount * 64
-        buffer[length - 2] = 0xaa
-        buffer[length - 1] = 0x55
-
-        let chunks = (0..<chunkCount).map { index in
-            FeaturePacket(report: [0] + buffer[index * 64..<(index + 1) * 64], expectsAck: false)
-        }
-        return [
-            FeaturePacket(report: LightingProtocol.command(0x19), expectsAck: true),
-            FeaturePacket(report: LightingProtocol.command(0x15, followingPackets: UInt8(chunkCount)), expectsAck: true),
-        ] + chunks + [
-            // The driver waits 35 ms after the last chunk plus Sleep(30).
-            FeaturePacket(report: LightingProtocol.command(0x02), expectsAck: true, settleTime: 0.065),
-        ]
+        return (buffer, offset)
     }
 }
 

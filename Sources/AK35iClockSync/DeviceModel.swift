@@ -258,6 +258,24 @@ extension AK35iDeviceSnapshot {
                 state: .experimental,
                 detail: "经 2.4G 接收器发送一包 07（与 Windows 驱动相同），已在此键盘实测禁用 Alt+Tab 和恢复默认。"
             )
+        case .perKeyLighting:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器切到自定义模式后发 21 包 14（与 Windows 驱动相同），已在此键盘实测。2.4G 下读不回颜色。"
+            )
+        case .keymap:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器整层发 21 包 10 / 12（与 Windows 驱动相同），已在此键盘实测两层改键、断电后保留和恢复默认。"
+            )
+        case .macros:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器发 09 宏表（与 Windows 驱动相同），最多 \(MacroProtocol.maxWirelessTableEnd) 字节，已在此键盘实测写入和清空。"
+            )
         default:
             return AK35iCapability(
                 feature: feature,

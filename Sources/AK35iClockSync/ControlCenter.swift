@@ -30,7 +30,7 @@ final class ControlCenterModel: ObservableObject {
             snapshot = try AK35iApplication.currentSnapshot()
             switch snapshot.connection {
             case .usbWired: message = "已刷新 USB HID 设备状态。"
-            case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量、设置灯效和系统设置；其它功能暂时需要用数据线连接并切到 USB 模式。"
+            case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量、设置灯效、系统设置、单键颜色、改键和宏；屏幕和实时灯效暂时需要用数据线连接并切到 USB 模式。"
             case .disconnected: message = "未发现 USB 有线控制接口或 2.4G 接收器。"
             }
         } catch {
@@ -318,7 +318,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。2.4G 下目前可同步时钟、设置灯效和系统设置，并只读读取电量。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。2.4G 下目前可同步时钟、设置灯效、系统设置、单键颜色、改键和宏，并只读读取电量。")
             }
             Section("状态") { Text(model.message) }
         }
