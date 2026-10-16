@@ -47,7 +47,7 @@ final class ClockProtocolTests: XCTestCase {
         XCTAssertEqual(snapshot.capability(.lighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.perKeyLighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.systemSettings).state, .experimental)
-        XCTAssertEqual(snapshot.capability(.keymap).state, .captureRequired)
+        XCTAssertEqual(snapshot.capability(.keymap).state, .experimental)
         XCTAssertEqual(snapshot.capability(.macros).state, .captureRequired)
     }
 

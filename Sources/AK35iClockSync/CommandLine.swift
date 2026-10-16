@@ -39,6 +39,8 @@ enum AK35iCommand: Equatable {
     case perKeyList
     case perKeySet(PerKeyColorRequest, apply: Bool)
     case systemSet(SystemSettings, apply: Bool)
+    case keymapSet(KeymapRequest, apply: Bool)
+    case keymapReset([KeymapLayer], apply: Bool)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -107,10 +109,12 @@ enum AK35iCommandParser {
             return try parsePerKeySet(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["system", "set"]):
             return try parseSystemSet(Array(values.dropFirst(2)))
+        case let values where values.starts(with: ["keymap", "set"]):
+            return try parseKeymapSet(Array(values.dropFirst(2)))
+        case let values where values.starts(with: ["keymap", "reset"]):
+            return try parseKeymapReset(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
-        case let values where values.starts(with: ["apply", "keymap"]):
-            throw AK35iCommandError.featureRequiresCapture(.keymap)
         case let values where values.starts(with: ["apply", "macro"]):
             throw AK35iCommandError.featureRequiresCapture(.macros)
         default:
@@ -247,6 +251,73 @@ enum AK35iCommandParser {
             }
         }
         return .systemSet(settings, apply: apply)
+    }
+
+    private static let keymapUsage = AK35iCommandError.invalidUsage(
+        "用法：ak35i keymap set [--layer base|fn] 键名=目标 ... [--apply]；目标为键名、Ctrl+Shift+C 这类组合、Ctrl/Shift/Alt/Cmd、media:名称、mouse:名称、disabled 或 default。运行 ak35i --help 查看。"
+    )
+
+    private static func parseKeymapSet(_ options: [String]) throws -> AK35iCommand {
+        var request = KeymapRequest()
+        var apply = false
+        var layerGiven = false
+
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--apply":
+                apply = true
+            case "--layer":
+                guard !layerGiven, let value = remaining.popFirst(), let layer = keymapLayer(value) else { throw keymapUsage }
+                layerGiven = true
+                request.layer = layer
+            default:
+                let parts = option.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { throw keymapUsage }
+                guard let key = KeyboardLayout.key(named: parts[0]) else {
+                    throw AK35iCommandError.invalidUsage("未知按键 \(parts[0])。运行 ak35i keys list 查看可用键名。")
+                }
+                guard key.name != "Fn" else {
+                    throw AK35iCommandError.invalidUsage("不能改 Fn 键本身，否则可能无法再进入 Fn 层。")
+                }
+                guard let action = KeyAction(target: parts[1]) else {
+                    throw AK35iCommandError.invalidUsage("无法识别的目标 \(parts[1])。")
+                }
+                guard request.assignments[key.light] == nil else {
+                    throw AK35iCommandError.invalidUsage("按键 \(parts[0]) 重复指定。")
+                }
+                request.assignments[key.light] = action
+            }
+        }
+        guard !request.assignments.isEmpty else { throw keymapUsage }
+        return .keymapSet(request, apply: apply)
+    }
+
+    private static func parseKeymapReset(_ options: [String]) throws -> AK35iCommand {
+        let usage = AK35iCommandError.invalidUsage("用法：ak35i keymap reset [--layer base|fn] [--apply]")
+        var layers = KeymapLayer.allCases
+        var apply = false
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--apply":
+                apply = true
+            case "--layer":
+                guard layers.count == KeymapLayer.allCases.count, let value = remaining.popFirst(), let layer = keymapLayer(value) else { throw usage }
+                layers = [layer]
+            default:
+                throw usage
+            }
+        }
+        return .keymapReset(layers, apply: apply)
+    }
+
+    private static func keymapLayer(_ value: String) -> KeymapLayer? {
+        switch value {
+        case "base": return .base
+        case "fn": return .fn
+        default: return nil
+        }
     }
 
     private static func hexColor(_ text: String) -> RGBColor? {

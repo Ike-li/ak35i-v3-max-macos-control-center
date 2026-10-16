@@ -72,6 +72,22 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func applyKeymap(_ request: KeymapRequest) {
+        do {
+            message = try AK35iApplication.applyKeymap(request)
+        } catch {
+            message = "改键写入失败：\(error.localizedDescription)"
+        }
+    }
+
+    func resetKeymap() {
+        do {
+            message = try KeymapLayer.allCases.map { try AK35iApplication.applyKeymap(KeymapRequest(layer: $0)) }.joined(separator: "\n")
+        } catch {
+            message = "恢复默认改键失败：\(error.localizedDescription)"
+        }
+    }
+
     func setAutoSync(_ enabled: Bool) {
         do {
             let store = AutoSyncLaunchAgentStore()
@@ -163,7 +179,7 @@ private struct ControlCenterRootView: View {
             case .screen:
                 LockedFeatureView(model: model, feature: .screenUpload)
             case .keymap:
-                LockedFeatureView(model: model, feature: .keymap)
+                KeymapView(model: model)
             case .macros:
                 LockedFeatureView(model: model, feature: .macros)
             }
@@ -197,7 +213,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光和系统设置为实验性写入。屏幕、改键与宏在取得实机证据前保持锁定。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置和改键为实验性写入。屏幕与宏在取得实机证据前保持锁定。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -388,8 +404,13 @@ private struct PerKeyView: View {
             Section("自定义单键灯光") {
                 LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
                 Text(capability.detail).foregroundStyle(.secondary)
-                KeyboardCanvas(editor: $editor)
-                    .frame(minHeight: 200)
+                KeyboardCanvas(
+                    color: { editor.colors[$0.light] ?? black },
+                    label: { $0.name },
+                    isSelected: { editor.selection.contains($0.light) },
+                    onTap: { editor.toggle($0.light) }
+                )
+                .frame(minHeight: 200)
                 HStack {
                     ColorPicker("画笔颜色", selection: Binding(
                         get: { brush.cgColor },
@@ -437,9 +458,115 @@ private struct PerKeyView: View {
     }
 }
 
+private struct KeymapView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var editor = KeymapEditorState()
+    @State private var target = ""
+    @State private var targetError: String?
+    @State private var confirmsApply = false
+    @State private var confirmsReset = false
+
+    private var capability: AK35iCapability { model.snapshot.capability(.keymap) }
+    private let plain = RGBColor(red: 0x3a, green: 0x3a, blue: 0x3c)
+    private let changed = RGBColor(red: 0xff, green: 0x9f, blue: 0x0a)
+
+    private var selectedKey: KeyboardKey? {
+        KeyboardLayout.keys.first { $0.light == editor.selection }
+    }
+
+    var body: some View {
+        Form {
+            Section("板载改键") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                Picker("层", selection: $editor.layer) {
+                    ForEach(KeymapLayer.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                KeyboardCanvas(
+                    color: { editor.action(for: $0.light) == nil ? plain : changed },
+                    label: { key in editor.action(for: key.light).map { "\(key.name)\n→\($0.displayName)" } ?? key.name },
+                    isSelected: { editor.selection == $0.light },
+                    onTap: { key in
+                        editor.selection = key.light
+                        target = editor.action(for: key.light)?.displayName ?? ""
+                        targetError = nil
+                    }
+                )
+                .frame(minHeight: 200)
+                if let key = selectedKey {
+                    if key.name == "Fn" {
+                        Text("Fn 键本身不能改，否则可能无法再进入 Fn 层。").foregroundStyle(.secondary)
+                    } else {
+                        HStack {
+                            TextField("\(key.name) 改为", text: $target, prompt: Text("如 Esc、Ctrl+C、Cmd、media:mute、mouse:left"))
+                                .onSubmit(assignTarget)
+                            Button("设置", action: assignTarget)
+                            Button("禁用") { editor.assign(.disabled); target = "disabled" }
+                            Button("恢复默认") { editor.assign(.defaultKey); target = "" }
+                        }
+                        if let targetError {
+                            Text(targetError).foregroundStyle(.red)
+                        }
+                    }
+                } else {
+                    Text("点选一个键来修改它在当前层的功能。").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("写入\(editor.layer.displayName)") { confirmsApply = true }
+                    Button("两层恢复默认") { confirmsReset = true }
+                }
+                .disabled(capability.state != .experimental)
+            }
+            Section("说明") {
+                Text("键盘不提供读取改键的命令，这里只显示本次在页面上做的修改。写入时整层替换：图上没有标橙色的键都会恢复默认，之前写入这一层的改键会被清除。")
+                    .foregroundStyle(.secondary)
+                Text("媒体键：" + MediaKey.allCases.map { "media:" + $0.cliName }.joined(separator: " ") + "\n鼠标：" + MouseAction.allCases.map { "mouse:" + $0.cliName }.joined(separator: " "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("改键")
+        .padding()
+        .alert("将\(editor.layer.displayName)写入键盘？", isPresented: $confirmsApply) {
+            Button("取消", role: .cancel) {}
+            Button("写入") { model.applyKeymap(editor.request()) }
+        } message: {
+            Text("实验性功能：整层替换，未标橙色的键恢复默认。")
+        }
+        .alert("两层改键都恢复默认？", isPresented: $confirmsReset) {
+            Button("取消", role: .cancel) {}
+            Button("恢复") {
+                model.resetKeymap()
+                for layer in KeymapLayer.allCases {
+                    editor.layer = layer
+                    editor.clearLayer()
+                }
+                editor.layer = .base
+            }
+        } message: {
+            Text("与 Windows 驱动的“重置键盘”相同：普通层和 Fn 层的全部改键都会清除。")
+        }
+    }
+
+    private func assignTarget() {
+        guard let action = KeyAction(target: target) else {
+            targetError = "无法识别「\(target)」。"
+            return
+        }
+        targetError = nil
+        editor.assign(action)
+    }
+}
+
 /// Keys drawn at their rectangles in the driver's layout image.
 private struct KeyboardCanvas: View {
-    @Binding var editor: PerKeyEditorState
+    let color: (KeyboardKey) -> RGBColor
+    let label: (KeyboardKey) -> String
+    let isSelected: (KeyboardKey) -> Bool
+    let onTap: (KeyboardKey) -> Void
     private static let origin = CGPoint(x: 30, y: 48)
     private static let extent = CGSize(width: 740, height: 212)
 
@@ -450,12 +577,13 @@ private struct KeyboardCanvas: View {
                 ForEach(KeyboardLayout.keys, id: \.light) { key in
                     KeyCap(
                         key: key,
-                        color: editor.colors[key.light] ?? RGBColor(red: 0, green: 0, blue: 0),
-                        selected: editor.selection.contains(key.light),
+                        label: label(key),
+                        color: color(key),
+                        selected: isSelected(key),
                         scale: scale
                     )
                     .offset(x: (CGFloat(key.x) - Self.origin.x) * scale, y: (CGFloat(key.y) - Self.origin.y) * scale)
-                    .onTapGesture { editor.toggle(key.light) }
+                    .onTapGesture { onTap(key) }
                 }
             }
         }
@@ -465,6 +593,7 @@ private struct KeyboardCanvas: View {
 
 private struct KeyCap: View {
     let key: KeyboardKey
+    let label: String
     let color: RGBColor
     let selected: Bool
     let scale: CGFloat
@@ -476,9 +605,9 @@ private struct KeyCap: View {
             .fill(Color(cgColor: color.cgColor))
             .overlay(shape.stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: selected ? 3 : 1))
             .overlay(
-                Text(key.name)
+                Text(label)
                     .font(.system(size: 7 * scale))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.5)
                     .padding(1)
                     .foregroundStyle(isLight ? Color.black : Color.white)

@@ -34,6 +34,10 @@ enum AK35iApplication {
             return runPerKeySet(request, apply: apply)
         case .systemSet(let settings, let apply):
             return runSystemSet(settings, apply: apply)
+        case .keymapSet(let request, let apply):
+            return runKeymapSet(request, apply: apply)
+        case .keymapReset(let layers, let apply):
+            return runKeymapReset(layers, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -71,6 +75,11 @@ enum AK35iApplication {
         print("  system set [选项] [--apply]          预览或写入系统设置（实验性），未指定的项按驱动默认值")
         print("      --sleep never|1m|5m|30m  --response 1-5  --fn-switch 0|1")
         print("      --disable-win on|off  --disable-alt-tab on|off  --disable-alt-f4 on|off")
+        print("  keymap set 键名=目标 ... [--layer base|fn] [--apply]  预览或写入改键（实验性），未列出的键恢复默认")
+        print("      目标：键名（Esc）、组合（Ctrl+Shift+C）、Ctrl/Shift/Alt/Cmd、disabled、default")
+        print("            media:" + MediaKey.allCases.map(\.cliName).joined(separator: "|"))
+        print("            mouse:" + MouseAction.allCases.map(\.cliName).joined(separator: "|"))
+        print("  keymap reset [--layer base|fn] [--apply]  把改键恢复为默认（不指定层时两层都恢复）")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
@@ -223,6 +232,53 @@ enum AK35iApplication {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
         }
+    }
+
+    private static func runKeymapSet(_ request: KeymapRequest, apply: Bool) -> Int32 {
+        print("改键：\(request.layer.displayName)（整层写入，未列出的键恢复默认，会覆盖这一层之前的全部改键）")
+        for key in KeyboardLayout.keys {
+            guard let action = request.assignments[key.light] else { continue }
+            let record = action.record.map { String(format: "%02X", $0) }.joined(separator: " ")
+            print("  \(key.name) → \(action.displayName)  [\(record)]")
+        }
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+        do {
+            print(try applyKeymap(request))
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    private static func runKeymapReset(_ layers: [KeymapLayer], apply: Bool) -> Int32 {
+        print("恢复默认改键：" + layers.map(\.displayName).joined(separator: "、"))
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+        do {
+            for layer in layers {
+                print(try applyKeymap(KeymapRequest(layer: layer)))
+            }
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
+    }
+
+    static func applyKeymap(_ request: KeymapRequest) throws -> String {
+        let transport = try AK35iHIDClockTransport()
+        let result = try FeatureSequenceWriter.send(KeymapProtocol.packets(layer: request.layer, assignments: request.assignments), to: transport)
+        guard result.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(result.unacknowledgedPackets)
+        }
+        let changed = request.assignments.values.filter { $0 != .defaultKey }.count
+        return "已写入\(request.layer.displayName)（\(changed) 个键改动，其余为默认），键盘已确认全部命令。可用 ak35i keymap reset --apply 恢复默认。"
     }
 
     static func applySystemSettings(_ settings: SystemSettings) throws -> String {

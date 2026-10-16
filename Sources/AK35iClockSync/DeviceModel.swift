@@ -182,7 +182,11 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         case .screenUpload:
             return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")
         case .keymap:
-            return captureRequired(feature, "板载改键需要完整读写和回滚抓包，当前保持只读。")
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "已在此键盘实机验证普通层 CapsLock→Esc（拔插后保留）和 Fn 层 F1→静音，并能恢复默认。键盘不提供读取，每次写入整层，未列出的键恢复默认；可在改键页或用 CLI ak35i keymap set 写入，ak35i keymap reset --apply 恢复。"
+            )
         case .macros:
             return captureRequired(feature, "宏事件编码与持久化序列尚未验证，当前保持只读。")
         }
@@ -221,7 +225,9 @@ enum SafetyGate {
             return .unavailable("屏幕内容尚无经验证的硬件读取协议，不能伪造备份。")
         case .diagnostics:
             return .notNeeded("设备诊断不修改板载配置。")
-        case .battery, .lighting, .keymap, .macros:
+        case .keymap:
+            return .unavailable("键盘不提供读取命令；ak35i keymap reset --apply 可写回两层默认（与驱动“重置键盘”相同）。")
+        case .battery, .lighting, .macros:
             return .unavailable("此功能尚未取得 V3 Max 的读取与回滚抓包，不能安全备份。")
         }
     }

@@ -71,6 +71,31 @@ enum FeatureSequenceWriter {
     }
 }
 
+/// Session shared by the per-key colour upload 0x44c5f0 (`04 23`) and the
+/// key-map upload 0x418590 (`04 11` / `04 27`): start, the command carrying
+/// the chunk count, 576 bytes in 64-byte chunks without ACK, commit and an
+/// acknowledged `04 F0`. Bytes 574–575 of the block are `AA 55`.
+enum BlockUpload {
+    static let chunkCount = 9
+    static let blockLength = chunkCount * 64
+
+    static func packets(opcode: UInt8, block: [UInt8]) -> [FeaturePacket] {
+        var block = block
+        block[blockLength - 2] = 0xaa
+        block[blockLength - 1] = 0x55
+        let chunks = (0..<chunkCount).map { index in
+            FeaturePacket(report: [0] + block[index * 64..<(index + 1) * 64], expectsAck: false)
+        }
+        return [
+            FeaturePacket(report: LightingProtocol.command(0x18), expectsAck: true),
+            FeaturePacket(report: LightingProtocol.command(opcode, followingPackets: UInt8(chunkCount)), expectsAck: true),
+        ] + chunks + [
+            FeaturePacket(report: LightingProtocol.command(0x02), expectsAck: true),
+            FeaturePacket(report: LightingProtocol.command(0xf0), expectsAck: true),
+        ]
+    }
+}
+
 enum FeatureBlockReader {
     /// Mirrors DeviceDriver.exe 0x44ff70 followed by the `04 02` that 0x42b1e0
     /// always sends after a read: request, ACK, then one 64-byte chunk per read.
