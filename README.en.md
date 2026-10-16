@@ -2,7 +2,7 @@
 
 [中文](README.md) · [Download](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [Getting started](docs/GETTING_STARTED.md) · [Chinese and English manuals](docs/manuals/) · [Protocol status](docs/PROTOCOL_STATUS.md)
 
-A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes that have been verified on the physical device; all unknown vendor-HID writes remain locked.
+A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. The project enables only writes backed by physical-device evidence: the verified screen clock and experimental basic lighting (CLI only). All other vendor-HID writes remain locked.
 
 ## At a glance
 
@@ -10,9 +10,10 @@ A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. T
 |---|---|
 | Verified hardware | AK35i V3 Max, USB VID:PID `0C45:8009` |
 | Verified write | Screen clock sync: UTC+8 or the Mac system time zone |
+| Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color via `ak35i light set` (CLI only) |
 | Connection | USB wired mode only |
 | Release build | Apple Silicon (`arm64`), macOS 13+ |
-| Deliberately locked | RGB, image/GIF upload, remapping, macros, battery reads |
+| Deliberately locked | User lighting and per-key colors, image/GIF upload, remapping, macros, battery reads |
 | Privacy | No account, telemetry, upload, or device serial-number display/persistence |
 
 ## Quick start
@@ -37,6 +38,6 @@ See the [getting-started guide](docs/GETTING_STARTED.md), [Chinese and English m
 
 ## Scope and safety
 
-RGB, display upload, key mapping, macros, and battery reads need action-to-packet-to-response-to-persistence evidence before they can be enabled. The app does not guess opcodes or send unverified vendor commands.
+Basic lighting has packet-to-acknowledgement-to-effect-to-persistence evidence from the physical keyboard, but only the static and stream modes have been checked by eye and individual parameter values are unconfirmed, so it stays experimental and CLI-only; the keyboard's own `Fn+\|` shortcuts restore it. Display upload, key mapping, macros, and battery reads still need the same evidence before they can be enabled. The app does not guess opcodes or send unverified vendor commands.
 
 This is an independent community project and is not affiliated with AJAZZ. It does not distribute vendor drivers, firmware, images, GIFs, or source code. See [NOTICE.md](NOTICE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).

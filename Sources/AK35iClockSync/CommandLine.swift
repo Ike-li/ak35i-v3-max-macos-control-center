@@ -34,6 +34,8 @@ enum AK35iCommand: Equatable {
     case backup
     case restore
     case autoSync(AutoSyncAction)
+    case lightingList
+    case lightingSet(LightingEffect, apply: Bool)
 }
 
 enum AK35iCommandError: LocalizedError, Equatable {
@@ -92,10 +94,12 @@ enum AK35iCommandParser {
             return .autoSync(.enable)
         case ["autosync", "disable"]:
             return .autoSync(.disable)
+        case ["light", "list"]:
+            return .lightingList
+        case let values where values.starts(with: ["light", "set"]):
+            return try parseLightingSet(Array(values.dropFirst(2)))
         case let values where values.starts(with: ["apply", "screen"]):
             throw AK35iCommandError.featureRequiresCapture(.screenUpload)
-        case let values where values.starts(with: ["apply", "lighting"]):
-            throw AK35iCommandError.featureRequiresCapture(.lighting)
         case let values where values.starts(with: ["apply", "keymap"]):
             throw AK35iCommandError.featureRequiresCapture(.keymap)
         case let values where values.starts(with: ["apply", "macro"]):
@@ -107,6 +111,56 @@ enum AK35iCommandParser {
 
     private static func parsedTimeZone(_ arguments: [String]) -> ClockTimeZone {
         arguments.contains("--utc8") || arguments.contains("--utc+8") ? .utcPlusEight : .system
+    }
+
+    private static let lightingUsage = AK35iCommandError.invalidUsage(
+        "用法：ak35i light set --mode <0-19> [--brightness 0-5] [--speed 0-5] [--direction N] [--color RRGGBB | --colorful] [--apply]"
+    )
+
+    private static func parseLightingSet(_ options: [String]) throws -> AK35iCommand {
+        var mode: LightingMode?
+        var brightness: Int?
+        var speed: Int?
+        var direction: Int?
+        var color: LightingColor?
+        var apply = false
+
+        var remaining = options[...]
+        while let option = remaining.popFirst() {
+            switch option {
+            case "--apply":
+                apply = true
+            case "--colorful":
+                guard color == nil else { throw lightingUsage }
+                color = .colorful
+            case "--color":
+                guard color == nil, let value = remaining.popFirst(), let rgb = hexColor(value) else { throw lightingUsage }
+                color = .solid(rgb)
+            case "--mode", "--brightness", "--speed", "--direction":
+                guard let value = remaining.popFirst().flatMap({ Int($0) }) else { throw lightingUsage }
+                switch option {
+                case "--mode":
+                    guard let parsed = UInt8(exactly: value).flatMap(LightingMode.init(rawValue:)) else {
+                        throw AK35iCommandError.invalidUsage("灯效模式必须是 0–19。运行 ak35i light list 查看。")
+                    }
+                    mode = parsed
+                case "--brightness": brightness = value
+                case "--speed": speed = value
+                default: direction = value
+                }
+            default:
+                throw lightingUsage
+            }
+        }
+
+        guard let mode else { throw lightingUsage }
+        let effect = try LightingEffect(mode: mode, brightness: brightness, speed: speed, direction: direction, color: color)
+        return .lightingSet(effect, apply: apply)
+    }
+
+    private static func hexColor(_ text: String) -> RGBColor? {
+        guard text.count == 6, text.allSatisfy(\.isHexDigit), let value = UInt32(text, radix: 16) else { return nil }
+        return RGBColor(red: UInt8(value >> 16), green: UInt8((value >> 8) & 0xff), blue: UInt8(value & 0xff))
     }
 }
 

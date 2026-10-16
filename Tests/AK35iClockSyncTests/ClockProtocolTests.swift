@@ -44,7 +44,7 @@ final class ClockProtocolTests: XCTestCase {
         XCTAssertEqual(snapshot.channels.map(\.kind), [.clockAndSettings, .screenTransfer])
         XCTAssertEqual(snapshot.capability(.clock).state, .verified)
         XCTAssertEqual(snapshot.capability(.screenUpload).state, .captureRequired)
-        XCTAssertEqual(snapshot.capability(.lighting).state, .captureRequired)
+        XCTAssertEqual(snapshot.capability(.lighting).state, .experimental)
         XCTAssertEqual(snapshot.capability(.keymap).state, .captureRequired)
         XCTAssertEqual(snapshot.capability(.macros).state, .captureRequired)
     }

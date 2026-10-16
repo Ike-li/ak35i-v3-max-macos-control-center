@@ -85,6 +85,7 @@ enum AK35iFeature: String, Codable, CaseIterable, Equatable {
 
 enum AK35iFeatureState: String, Codable, Equatable {
     case verified
+    case experimental
     case captureRequired
     case notConnected
 }
@@ -157,7 +158,11 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         case .battery:
             return captureRequired(feature, "产品支持电量显示；读取命令须以 V3 Max 抓包验证后启用。")
         case .lighting:
-            return captureRequired(feature, "不猜测 RGB 写入报文；等待 V3 Max 驱动抓包。")
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "基础灯效已在此键盘实机验证静态恒亮（设备确认、重连后保留），川流不息目测正常；其余模式按静态逆向发送。目前仅能用 CLI ak35i light set 写入，可用 Fn+\\| 恢复。"
+            )
         case .screenUpload:
             return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")
         case .keymap:

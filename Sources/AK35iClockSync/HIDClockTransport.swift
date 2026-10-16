@@ -8,6 +8,7 @@ enum HIDClockError: LocalizedError {
     case managerOpenFailed(IOReturn)
     case deviceOpenFailed(IOReturn)
     case featureWriteFailed(packet: Int, status: IOReturn)
+    case featureReadFailed(status: IOReturn)
 
     var errorDescription: String? {
         switch self {
@@ -20,7 +21,9 @@ enum HIDClockError: LocalizedError {
         case .deviceOpenFailed(let status):
             return "无法打开键盘的 HID 控制接口（\(formatted(status))）。"
         case .featureWriteFailed(let packet, let status):
-            return "第 \(packet) 个时钟报文未写入（\(formatted(status))）。"
+            return "第 \(packet) 个报文未写入（\(formatted(status))）。"
+        case .featureReadFailed(let status):
+            return "无法读回键盘应答（\(formatted(status))）。"
         }
     }
 
@@ -90,6 +93,16 @@ final class AK35iHIDClockTransport {
         }
     }
 
+    func readFeature() throws -> [UInt8] {
+        var report = Array(repeating: UInt8(0), count: ClockProtocol.reportLength - 1)
+        var length = report.count
+        let status = report.withUnsafeMutableBufferPointer { buffer in
+            IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 0, buffer.baseAddress!, &length)
+        }
+        guard status == kIOReturnSuccess else { throw HIDClockError.featureReadFailed(status: status) }
+        return Array(report.prefix(length))
+    }
+
     func readFeatureBestEffort() {
         var report = Array(repeating: UInt8(0), count: ClockProtocol.reportLength - 1)
         var length = report.count
@@ -104,3 +117,5 @@ final class AK35iHIDClockTransport {
         }
     }
 }
+
+extension AK35iHIDClockTransport: FeatureReportDevice {}

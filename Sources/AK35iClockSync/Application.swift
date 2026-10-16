@@ -24,6 +24,10 @@ enum AK35iApplication {
             return EXIT_FAILURE
         case .autoSync(let action):
             return runAutoSync(action: action, executablePath: executablePath)
+        case .lightingList:
+            return printLightingModes()
+        case .lightingSet(let effect, let apply):
+            return runLightingSet(effect, apply: apply)
         case .gui:
             return EXIT_SUCCESS
         }
@@ -52,9 +56,58 @@ enum AK35iApplication {
         print("  preview time [--utc8]                不连接键盘，仅预览时间报文")
         print("  autosync status|enable|disable        查看、启用或关闭每日 UTC+8 自动校时")
         print("  backup | restore                      显示安全备份/恢复状态")
+        print("  light list                           列出 20 种基础灯效及可调参数")
+        print("  light set --mode N [选项] [--apply]  预览或写入基础灯效（实验性）")
+        print("      --brightness 0-5  --speed 0-5  --direction N  --color RRGGBB | --colorful")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
-        print("屏幕 GIF、RGB、板载改键和宏尚未取得 V3 Max 抓包验证，已被安全锁定。")
+        print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")
+    }
+
+    private static func printLightingModes() -> Int32 {
+        print("基础灯效（模式号来自 Windows 驱动默认表）：")
+        for mode in LightingMode.allCases {
+            var parameters: [String] = []
+            if mode.supportsBrightness { parameters.append("亮度") }
+            if mode.supportsSpeed { parameters.append("速度") }
+            if let directions = mode.allowedDirections {
+                parameters.append("方向 " + directions.map(String.init).joined(separator: "/"))
+            }
+            if mode.supportsColor { parameters.append("颜色/多彩") }
+            let name = mode.displayName.padding(toLength: 6, withPad: "　", startingAt: 0)
+            print(String(format: "  %2d  ", mode.rawValue) + name + "  " + (parameters.isEmpty ? "无参数" : parameters.joined(separator: "、")))
+        }
+        print("未指定的参数使用驱动默认值：亮度 5、速度 3、方向 0、多彩。")
+        return EXIT_SUCCESS
+    }
+
+    private static func runLightingSet(_ effect: LightingEffect, apply: Bool) -> Int32 {
+        let packets = LightingProtocol.packets(for: effect)
+        print("灯效：\(effect.mode.rawValue) \(effect.mode.displayName)")
+        for (index, packet) in packets.enumerated() {
+            let payload = HIDFeatureReport.macOSPayload(from: packet.report)
+            let bytes = payload.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+            print("  \(index + 1). \(bytes)\(packet.expectsAck ? "  [需确认]" : "")")
+        }
+        guard apply else {
+            print("预览完成；未连接或写入键盘。确认写入请加 --apply。")
+            return EXIT_SUCCESS
+        }
+
+        do {
+            let transport = try AK35iHIDClockTransport()
+            let result = try FeatureSequenceWriter.send(packets, to: transport)
+            guard result.unacknowledgedPackets.isEmpty else {
+                let indices = result.unacknowledgedPackets.map(String.init).joined(separator: "、")
+                fputs("第 \(indices) 个命令未收到键盘确认；会话已按驱动顺序结束。请查看灯效，必要时用 Fn+\\| 切换恢复。\n", stderr)
+                return EXIT_FAILURE
+            }
+            print("键盘已确认全部命令。如效果不符，可用 Fn+\\| 切换灯效、Fn+↑/↓ 调亮度恢复。")
+            return EXIT_SUCCESS
+        } catch {
+            fputs("错误：\(error.localizedDescription)\n", stderr)
+            return EXIT_FAILURE
+        }
     }
 
     private static func printStatus(json: Bool) -> Int32 {
@@ -168,6 +221,7 @@ enum AK35iApplication {
     static func capabilityStateName(_ state: AK35iFeatureState) -> String {
         switch state {
         case .verified: return "已验证"
+        case .experimental: return "实验性"
         case .captureRequired: return "等待抓包"
         case .notConnected: return "未连接"
         }

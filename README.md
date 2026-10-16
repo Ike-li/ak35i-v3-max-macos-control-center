@@ -6,7 +6,7 @@
 
 [English](README.en.md) · [下载](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases) · [快速上手](docs/GETTING_STARTED.md) · [中英文说明书](docs/manuals/) · [故障排查](docs/TROUBLESHOOTING.md) · [功能状态](docs/PROTOCOL_STATUS.md)
 
-面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前只允许向已实机验证的 USB HID 时钟通道写入时间；所有其他私有协议功能默认锁定。
+面向 **AJAZZ AK35i V3 Max** 的原生 macOS 控制中心与 CLI。项目坚持“先验证、后写入”：目前开放已实机验证的屏幕时钟，以及实验性的基础灯效（仅 CLI）；其他私有协议功能默认锁定。
 
 > Independent community project. It is not affiliated with, endorsed by, or supported by AJAZZ. See [NOTICE.md](NOTICE.md).
 
@@ -16,9 +16,10 @@
 |---|---|
 | 已验证硬件 | USB VID:PID `0C45:8009` 的 AK35i V3 Max |
 | 已验证写入 | 屏幕时钟：UTC+8 或 Mac 当前时区 |
+| 实验性写入 | 基础灯效：20 种模式及亮度、速度、方向、颜色，`ak35i light set`（仅 CLI） |
 | 连接要求 | USB 有线模式；蓝牙与 2.4G 不提供控制承诺 |
 | 支持系统 | 当前发布包为 Apple Silicon (`arm64`)、macOS 13+ |
-| 未开放写入 | RGB、图片/GIF、改键、宏、电量读取 |
+| 未开放写入 | 用户灯效与自定义单键颜色、图片/GIF、改键、宏、电量读取 |
 | 网络与隐私 | 无账号、遥测或上传；不显示、保存或写入设备序列号 |
 
 ## 下载并同步时间
@@ -32,7 +33,7 @@
 
 ## 为什么功能没有全开？
 
-屏幕时钟已经经过真机验证。RGB、屏幕图片/GIF、板载改键、宏和电量读取尚未取得每个功能的“操作 → 报文 → 应答 → 重连持久化”完整证据，因此程序不会猜测 opcode 或盲发写入。
+屏幕时钟已经经过真机验证。基础灯效的写入序列已在实机上取得“报文 → 设备确认 → 效果 → 重连后保留”的证据，但目前只看过静态恒亮和川流不息两种模式，各参数取值的效果也没有逐一确认，因此标为实验性，只能通过 CLI 使用；写错时可以用键盘的 `Fn+\|` 等快捷键恢复。屏幕图片/GIF、板载改键、宏和电量读取还没有取得同等证据，程序不会猜测 opcode，也不会盲发写入。
 
 这是刻意的安全边界，不是界面遗漏。详见 [功能与协议状态](docs/PROTOCOL_STATUS.md) 与 [安全模型](docs/SAFETY_MODEL.md)。
 
