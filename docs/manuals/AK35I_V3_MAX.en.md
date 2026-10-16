@@ -32,6 +32,6 @@ The main display includes date, time, battery, Mac/Win, USB/2.4G/Bluetooth statu
 
 - `Fn+\\|` cycles the 20 lighting effects; `Fn+Up/Down` adjusts brightness; `Fn+-/=` adjusts speed; `Fn+X` toggles lighting.
 - Holding `Fn+Space` for roughly 3–5 seconds performs a factory reset. Do not use it unless you intentionally want to clear onboard configuration.
-- These are hardware shortcuts only. They do not prove that the macOS app can write the corresponding function over Bluetooth. This project currently verifies **USB wired clock sync** only.
+- These are hardware shortcuts only. They do not prove that the macOS app can write the corresponding function over Bluetooth. See [protocol status](../PROTOCOL_STATUS.md) for what this project supports and how far each feature is verified.
 
 > The manufacturer or its rights holders own the source manual. This file is an English index and operational summary, not a redistribution of the source PDF.

@@ -14,9 +14,15 @@ if [[ -z ${DEVELOPER_DIR:-} && -d /Applications/Xcode.app/Contents/Developer ]];
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
+# AK35I_ARCHS="arm64 x86_64" builds a universal binary; unset builds for this Mac only.
+arch_flags=()
+for arch in ${=AK35I_ARCHS:-}; do
+    arch_flags+=(--arch "${arch}")
+done
+
 cd "${project_dir}"
-swift build -c release --disable-sandbox
-bin_path=$(swift build -c release --disable-sandbox --show-bin-path)
+swift build -c release --disable-sandbox "${arch_flags[@]}"
+bin_path=$(swift build -c release --disable-sandbox "${arch_flags[@]}" --show-bin-path)
 
 mkdir -p "${staging_path}/Contents/MacOS"
 install -m 644 "${project_dir}/Packaging/Info.plist" "${staging_path}/Contents/Info.plist"

@@ -19,12 +19,6 @@ struct AutoSyncLaunchAgentPlan {
     }
 }
 
-enum AutoSyncStoreError: LocalizedError {
-    case unavailable
-
-    var errorDescription: String? { "无法确定当前用户的 LaunchAgents 目录。" }
-}
-
 struct AutoSyncLaunchAgentStore {
     private let fileManager: FileManager
     private let directory: URL

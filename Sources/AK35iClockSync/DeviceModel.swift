@@ -96,7 +96,6 @@ enum AK35iFeature: String, Codable, CaseIterable, Equatable {
 enum AK35iFeatureState: String, Codable, Equatable {
     case verified
     case experimental
-    case captureRequired
     case notConnected
 }
 

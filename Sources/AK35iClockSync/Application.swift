@@ -753,7 +753,6 @@ enum AK35iApplication {
         switch state {
         case .verified: return "已验证"
         case .experimental: return "实验性"
-        case .captureRequired: return "等待抓包"
         case .notConnected: return "未连接"
         }
     }

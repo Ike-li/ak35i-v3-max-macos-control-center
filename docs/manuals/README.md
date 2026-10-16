@@ -11,4 +11,4 @@ The original manufacturer manual is not mirrored here. This keeps the public rep
 
 An additional [PDF mirror and model record](https://device.report/m/2b64f41f2a4ea9f90fe7f2a06bbf1a5ff837da3af10d79e2a3dd58fa5139859a) identifies the document as `AK35IV3` / `2AY3H-AK35IV3`.
 
-> These are reference links, not evidence that every shortcut is controllable by this macOS project. Current verified software writes remain limited to USB screen-clock sync.
+> These are reference links, not evidence that every shortcut is controllable by this macOS project. See [protocol status](../PROTOCOL_STATUS.md) for what the app supports.

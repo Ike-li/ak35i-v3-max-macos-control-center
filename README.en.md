@@ -12,18 +12,18 @@ A safety-first native macOS control center and CLI for the AJAZZ AK35i V3 Max. T
 | Verified write | Screen clock sync: UTC+8 or the Mac system time zone |
 | Experimental write | Basic lighting: 20 modes with brightness, speed, direction and color from the Lighting page or `ak35i light set`; per-key colors from the Per-key page or `ak35i keys set Esc=FF0000`; system settings (disable Win / Alt+Tab / Alt+F4, sleep, key response, Fn switch) from the System page or `ak35i system set`; key remapping (base and Fn layers) from the Keymap page or `ak35i keymap set CapsLock=Esc`; macros from the Macros page or `ak35i macro set "Cmd+Space, 100ms, A"`, bound to a key with `macro:N`; realtime effects (the Windows driver's eight originals) and the driver's music visualisation streamed from the Mac (nothing stored on the keyboard) from the Realtime page or `ak35i live wave` / `ak35i live music`; screen GIF page from the Screen page or `ak35i screen set picture.gif` |
 | Connection | USB wired mode; through the 2.4G receiver the clock, battery, lighting, system settings, per-key colours, key remapping, macros, the music bars and screen upload also work; only per-key realtime effects and reading per-key colours need the cable; over Bluetooth only the battery can be read (the keyboard ignores settings there, but settings written through the receiver or cable stay when switching back) |
-| Release build | Apple Silicon (`arm64`), macOS 13+ |
+| Release build | Universal (Intel and Apple Silicon), macOS 13+; the music rhythm needs macOS 14.2+ |
 | Read only | Battery, through the 2.4G receiver or Bluetooth, from the Battery page or `ak35i battery`; the keyboard does not report it over wired USB |
 | Privacy | No account, telemetry, upload, or device serial-number display/persistence |
 
 ## Quick start
 
-1. Download the latest `arm64.dmg` and its `.sha256` file from [Releases](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases).
-2. Connect the keyboard by cable and switch it to USB mode.
-3. Drag **AK35i Control Center** into Applications. If Gatekeeper blocks the first launch, Control-click the app and choose **Open**.
-4. Open **Clock**, select a time zone, and choose **Sync now**.
+1. Download the latest `universal.dmg` and its `.sha256` file from [Releases](https://github.com/Ike-li/ak35i-v3-max-macos-control-center/releases).
+2. Drag **AK35i Control Center** into Applications.
+3. The app is not signed with an Apple Developer ID or notarized, so macOS blocks the first launch. Click **Done**, open **System Settings › Privacy & Security**, click **Open Anyway** next to AK35i Control Center and confirm with your password. You only need to do this once. On macOS 14 and earlier you can also Control-click the app and choose **Open**.
+4. Connect the keyboard by cable (USB position) or through the 2.4G receiver and check the Overview page.
 
-The DMG is ad-hoc signed and is not notarized yet. It is a preview release, not a claim of broad hardware compatibility.
+The DMG is ad-hoc signed and not notarized.
 
 ## Build from source
 
@@ -38,6 +38,6 @@ See the [getting-started guide](docs/GETTING_STARTED.md), [Chinese and English m
 
 ## Scope and safety
 
-Basic lighting has packet-to-acknowledgement-to-effect-to-persistence evidence from the physical keyboard, but only the static and stream modes have been checked by eye, so it stays experimental; the keyboard's own `Fn+\|` shortcuts restore it. System settings, key remapping and macros also have hardware evidence and are marked experimental; the keyboard cannot read them back, but each can be rewritten to defaults or cleared. Screen GIF page upload is verified on the keyboard as well: it survives a power cycle and `Fn+PrtSc` shows it (press again to return), but the previous GIF page cannot be restored once overwritten (the factory boot animation is not affected). Battery can only be read through the 2.4G receiver, which is verified on the keyboard; it is not reported over wired USB (the Windows driver and firmware analysis agree). The app does not guess opcodes or send unverified vendor commands.
+Basic lighting has packet-to-acknowledgement-to-effect-to-persistence evidence from the physical keyboard, but only the static and stream modes have been checked by eye, so it stays experimental; the keyboard's own `Fn+\|` shortcuts restore it. System settings, key remapping and macros also have hardware evidence and are marked experimental; the keyboard cannot read them back, but each can be rewritten to defaults or cleared. Screen GIF page upload is verified on the keyboard as well: it survives a power cycle and `Fn+PrtSc` shows it (press again to return), but the previous GIF page cannot be restored once overwritten (the factory boot animation is not affected). Battery is read through the 2.4G receiver or Bluetooth, both verified on the keyboard; it is not reported over wired USB (the Windows driver and firmware analysis agree). The app does not guess opcodes or send unverified vendor commands.
 
 This is an independent community project and is not affiliated with AJAZZ. It does not distribute vendor drivers, firmware, images, GIFs, or source code; to reproduce the driver's realtime effects and key positions it does include small numeric tables and key-layout data taken from the driver (see NOTICE.md). See [NOTICE.md](NOTICE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
