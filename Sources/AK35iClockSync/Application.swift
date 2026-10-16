@@ -59,6 +59,11 @@ enum AK35iApplication {
 
     /// The keyboard's battery percentage through the 2.4G receiver.
     static func readBattery() throws -> Int {
+        switch try currentSnapshot().connection {
+        case .bluetooth: return try BluetoothBattery.read()
+        case .usbWired: throw BatteryError.wired
+        case .wireless, .disconnected: break
+        }
         let receiver = try AK35iReceiverTransport()
         guard let reply = try receiver.exchange(BatteryProtocol.request) else {
             throw BatteryError.noReply
@@ -80,11 +85,11 @@ enum AK35iApplication {
 
     /// The cable's control interface when present, otherwise the 2.4G receiver.
     static func currentSnapshot() throws -> AK35iDeviceSnapshot {
-        let wired = try AK35iHIDDeviceDiscovery().snapshot()
-        if wired.connection == .disconnected && AK35iReceiverTransport.isAttached() {
-            return .wireless
-        }
-        return wired
+        AK35iDeviceSnapshot.resolve(
+            wired: try AK35iHIDDeviceDiscovery().snapshot(),
+            bluetoothConnected: BluetoothBattery.isKeyboardConnected(),
+            receiverAttached: AK35iReceiverTransport.isAttached()
+        )
     }
 
     static func syncClock(timeZone: ClockTimeZone) throws -> String {
@@ -136,7 +141,7 @@ enum AK35iApplication {
         print("      --color RRGGBB（wave、music 除外）  --speed 1-5（solid、music 除外）  --seconds N")
         print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
         print("  battery")
-        print("      经 2.4G 接收器读取键盘电量（有线 USB 下键盘不提供电量）")
+        print("      经 2.4G 接收器或蓝牙读取键盘电量（有线 USB 下键盘不提供电量）")
         print("  screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
         print("      预览或上传屏幕动画（实验性），缩放到 240×135，最多 141 帧；覆盖屏幕 GIF 页，无法读回")
         print("      屏幕为 16:9，建议用 16:9 的图片（如 1920×1080）；其他比例等比缩小并留黑边")
@@ -614,6 +619,8 @@ enum AK35iApplication {
                 print("厂商 HID 通道：")
                 if snapshot.connection == .wireless {
                     print("  2.4G 下经接收器的 0xFF60 接口通信。")
+                } else if snapshot.connection == .bluetooth {
+                    print("  蓝牙下没有厂商通道，只能读取标准电池服务。")
                 } else if snapshot.channels.isEmpty {
                     print("  未发现。请连接 USB 数据线并切换到 USB 模式。")
                 }

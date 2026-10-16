@@ -10,7 +10,7 @@ enum ReceiverError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "未找到 AK35i 的 2.4G 接收器。电量只能经接收器读取：请插上接收器，把键盘拨到 2.4G 档。"
+            return "未找到 AK35i 的 2.4G 接收器。请插上接收器并把键盘拨到 2.4G 档，或改用蓝牙连接（蓝牙下只能读取电量）。"
         case .ambiguous(let count):
             return "发现了 \(count) 个可能的接收器接口；为避免发错设备，已停止。"
         case .writeFailed(let status):

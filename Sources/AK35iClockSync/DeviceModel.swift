@@ -5,12 +5,15 @@ enum AK35iConnection: String, Codable, Equatable {
     case usbWired
     /// Only the 2.4G receiver: commands go through its 32-byte interface.
     case wireless
+    /// Bluetooth: no vendor report, only the standard Battery Service.
+    case bluetooth
 
     var displayName: String {
         switch self {
         case .disconnected: return "未发现 USB 有线控制接口"
         case .usbWired: return "USB 有线已连接"
         case .wireless: return "2.4G 接收器已连接"
+        case .bluetooth: return "蓝牙已连接"
         }
     }
 }
@@ -148,9 +151,29 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
         serialNumber: nil
     )
 
+    static let bluetooth = AK35iDeviceSnapshot(
+        connection: .bluetooth,
+        channels: [],
+        product: "AK35i BT",
+        serialNumber: nil
+    )
+
+    /// The keyboard is in one mode at a time. The cable wins; a receiver may
+    /// stay plugged in while the keyboard is on Bluetooth, which then is the
+    /// only way to reach it.
+    static func resolve(wired: AK35iDeviceSnapshot, bluetoothConnected: Bool, receiverAttached: Bool) -> AK35iDeviceSnapshot {
+        if wired.connection == .usbWired { return wired }
+        if bluetoothConnected { return .bluetooth }
+        if receiverAttached { return .wireless }
+        return wired
+    }
+
     func capability(_ feature: AK35iFeature) -> AK35iCapability {
         if connection == .wireless {
             return wirelessCapability(feature)
+        }
+        if connection == .bluetooth {
+            return bluetoothCapability(feature)
         }
         guard connection == .usbWired else {
             return AK35iCapability(
@@ -228,6 +251,27 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
 }
 
 extension AK35iDeviceSnapshot {
+    /// Over Bluetooth the keyboard exposes no vendor report and its firmware
+    /// drops vendor frames (0x5B54); only the Battery Service is readable.
+    fileprivate func bluetoothCapability(_ feature: AK35iFeature) -> AK35iCapability {
+        switch feature {
+        case .diagnostics:
+            return AK35iCapability(feature: feature, state: .verified, detail: "已识别蓝牙键盘（0C45:FEFE）。")
+        case .battery:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经蓝牙标准电池服务只读读取。"
+            )
+        default:
+            return AK35iCapability(
+                feature: feature,
+                state: .notConnected,
+                detail: "蓝牙下键盘不接受设置命令（固件限制）。请用 2.4G 接收器或数据线写入，设置会保留到蓝牙模式。"
+            )
+        }
+    }
+
     /// Through the receiver the keyboard takes the driver's 2.4G packets
     /// (firmware 0x67C8); features are listed here as they are ported.
     fileprivate func wirelessCapability(_ feature: AK35iFeature) -> AK35iCapability {

@@ -31,6 +31,7 @@ final class ControlCenterModel: ObservableObject {
             switch snapshot.connection {
             case .usbWired: message = "已刷新 USB HID 设备状态。"
             case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量、设置灯效、系统设置、单键颜色、改键、宏、音乐律动和上传屏幕；波浪等逐键实时灯效需要用数据线连接并切到 USB 模式。"
+            case .bluetooth: message = "键盘经蓝牙连接：只能读取电量。设置需要 2.4G 接收器或数据线，写入后切回蓝牙仍保留。"
             case .disconnected: message = "未发现 USB 有线控制接口或 2.4G 接收器。"
             }
         } catch {
@@ -295,6 +296,9 @@ private struct OverviewView: View {
             Section("厂商 HID 通道") {
                 if model.snapshot.connection == .wireless {
                     Text("2.4G 下经接收器的 0xFF60 接口通信。")
+                        .foregroundStyle(.secondary)
+                } else if model.snapshot.connection == .bluetooth {
+                    Text("蓝牙下没有厂商通道，只能读取标准电池服务。")
                         .foregroundStyle(.secondary)
                 } else if model.snapshot.channels.isEmpty {
                     Text("未发现。请使用数据线连接并切换到 USB 模式。")
@@ -982,7 +986,7 @@ private struct BatteryView: View {
                 Button("立即读取") { model.readBattery() }
             }
             Section("说明") {
-                Text("电量经键盘的 2.4G 接收器读取，与 Windows 驱动相同：本页打开时每 15 秒读一次，只发送读取请求，不修改键盘设置。用数据线连接时键盘不提供电量，请看键盘屏幕上的电量格。")
+                Text("2.4G 下经接收器读取（与 Windows 驱动相同），蓝牙下经标准电池服务读取；本页打开时每 15 秒读一次，只读取，不修改键盘设置。用数据线连接时键盘不提供电量，请看键盘屏幕上的电量格。")
                     .foregroundStyle(.secondary)
             }
         }

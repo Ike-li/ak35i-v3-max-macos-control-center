@@ -13,7 +13,7 @@ enum HIDClockError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .deviceNotFound:
-            return "未找到 AK35i V3 Max 的有线控制接口。请确认键盘已用数据线连接，并切到 USB 模式。"
+            return "未找到 AK35i V3 Max 的有线控制接口。请用数据线连接并切到 USB 模式，或插上 2.4G 接收器并拨到 2.4G 档（蓝牙下键盘不接受设置命令）。"
         case .ambiguousDevice(let count):
             return "发现了 \(count) 个匹配的 HID 控制接口；为避免写错设备，已停止。"
         case .managerOpenFailed(let status):

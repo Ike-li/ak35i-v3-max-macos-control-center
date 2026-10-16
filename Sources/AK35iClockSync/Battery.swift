@@ -3,6 +3,7 @@ import Foundation
 enum BatteryError: LocalizedError {
     case noReply
     case invalidReply([UInt8])
+    case wired
 
     var errorDescription: String? {
         switch self {
@@ -10,6 +11,8 @@ enum BatteryError: LocalizedError {
             return "接收器没有转回键盘的应答：键盘可能没开机、没拨到 2.4G 档，或没和这个接收器配对。"
         case .invalidReply(let reply):
             return "键盘应答无法识别：" + reply.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
+        case .wired:
+            return "有线 USB 下键盘不提供电量，请看键盘屏幕；改用 2.4G 接收器或蓝牙连接时可以读取。"
         }
     }
 }
