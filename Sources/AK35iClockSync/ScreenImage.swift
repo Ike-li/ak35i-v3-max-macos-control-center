@@ -58,7 +58,7 @@ enum ScreenImage {
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
             ])
             let line = CTLineCreateWithAttributedString(text)
-            let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+            let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
             context.textPosition = CGPoint(x: (bounds.width - width) / 2, y: bounds.height / 2 - 8)
             CTLineDraw(line, context)
         }.withDelay(defaultDelay)

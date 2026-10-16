@@ -979,10 +979,17 @@ private struct KeyCap: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 3 * scale)
-        let isLight = 0.299 * Double(color.red) + 0.587 * Double(color.green) + 0.114 * Double(color.blue) > 140
+        let red: Double = 0.299 * Double(color.red)
+        let green: Double = 0.587 * Double(color.green)
+        let blue: Double = 0.114 * Double(color.blue)
+        let isLight = red + green + blue > 140
+        let border: Color = selected ? Color.accentColor : Color.secondary.opacity(0.5)
+        let borderWidth: CGFloat = selected ? 3 : 1
+        let width: CGFloat = CGFloat(key.width) * scale
+        let height: CGFloat = CGFloat(key.height) * scale
         shape
             .fill(Color(cgColor: color.cgColor))
-            .overlay(shape.stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: selected ? 3 : 1))
+            .overlay(shape.stroke(border, lineWidth: borderWidth))
             .overlay(
                 Text(label)
                     .font(.system(size: 7 * scale))
@@ -991,7 +998,7 @@ private struct KeyCap: View {
                     .padding(1)
                     .foregroundStyle(isLight ? Color.black : Color.white)
             )
-            .frame(width: CGFloat(key.width) * scale, height: CGFloat(key.height) * scale)
+            .frame(width: width, height: height)
             .contentShape(shape)
     }
 }

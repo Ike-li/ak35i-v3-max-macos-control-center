@@ -76,13 +76,11 @@ enum ScreenProtocol {
         let count = (image.count + WirelessProtocol.dataLength - 1) / WirelessProtocol.dataLength
         image += Array(repeating: 0xff, count: count * WirelessProtocol.dataLength - image.count)
         let start = WirelessProtocol.packet(0x7f, length: 0x03, data: [slot, UInt8(count & 0xff), UInt8((count >> 8) & 0xff), UInt8(count >> 16)])
-        return [start] + (0..<count).map { index in
-            WirelessProtocol.packet(
-                0x80 + UInt8(index >> 16),
-                length: UInt8(index & 0xff),
-                sequence: UInt8((index >> 8) & 0xff),
-                data: Array(image[index * WirelessProtocol.dataLength..<(index + 1) * WirelessProtocol.dataLength])
-            )
+        let size = WirelessProtocol.dataLength
+        return [start] + (0..<count).map { (index: Int) -> [UInt8] in
+            let command: UInt8 = 0x80 + UInt8(index >> 16)
+            let data: [UInt8] = Array(image[index * size..<(index + 1) * size])
+            return WirelessProtocol.packet(command, length: UInt8(index & 0xff), sequence: UInt8((index >> 8) & 0xff), data: data)
         }
     }
 

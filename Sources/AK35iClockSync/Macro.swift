@@ -125,13 +125,10 @@ enum MacroProtocol {
         precondition(count <= maxWirelessPackets)
         buffer[count * 28 - 2] = 0xaa
         buffer[count * 28 - 1] = 0x55
-        return (0..<count).map { index in
-            WirelessProtocol.packet(
-                0x09,
-                length: index == count - 1 ? UInt8(end % 28) : 0x1c,
-                sequence: UInt8(index),
-                data: Array(buffer[index * 28..<(index + 1) * 28])
-            )
+        return (0..<count).map { (index: Int) -> [UInt8] in
+            let length: UInt8 = index == count - 1 ? UInt8(end % 28) : 0x1c
+            let data: [UInt8] = Array(buffer[index * 28..<(index + 1) * 28])
+            return WirelessProtocol.packet(0x09, length: length, sequence: UInt8(index), data: data)
         }
     }
 
