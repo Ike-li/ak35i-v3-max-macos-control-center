@@ -95,6 +95,7 @@ enum AK35iApplication {
         print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
         print("  screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
         print("      预览或上传屏幕动画（实验性），缩放到 240×135，最多 141 帧；覆盖屏幕 GIF 页，无法读回")
+        print("      屏幕为 16:9，建议用 16:9 的图片（如 1920×1080）；其他比例等比缩小并留黑边")
         print("")
         print("兼容旧命令：ak35i --apply --utc8")
         print("基础灯效为实验性功能；用户灯效、自定义颜色、屏幕 GIF、板载改键和宏尚未验证，已被安全锁定。")

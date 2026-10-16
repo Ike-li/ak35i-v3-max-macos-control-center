@@ -729,6 +729,8 @@ private struct ScreenView: View {
                         Text("\(frames.count) 帧 · \(blockCount) 块 · 约 \(Int((Double(blockCount) * 0.16).rounded(.up))) 秒")
                             .foregroundStyle(.secondary)
                         Text("预览为键盘上的实际效果（240×135，RGB565）。").font(.caption).foregroundStyle(.secondary)
+                        Text("屏幕是 16:9 横屏，建议用 16:9 的图片（如 1920×1080 或 240×135）铺满；其他比例会等比缩小，空出的部分显示黑边。")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if let loadError {
