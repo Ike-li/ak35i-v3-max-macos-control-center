@@ -341,23 +341,36 @@ enum AK35iCommandParser {
     }
 
     private static let liveUsage = AK35iCommandError.invalidUsage(
-        "用法：ak35i live solid|breathing|wave|starry|music [--color RRGGBB] [--speed 1-5] [--seconds N]（wave、music 不取颜色，solid、music 不取速度）"
+        "用法：ak35i live static|starlight|fluttering|breathing|fountain|wave|currents|rotating|music [--color RRGGBB] [--speed 1-15] [--seconds N]（给颜色即为单色，否则多彩；fluttering、music 不取颜色，static、music 不取速度）"
     )
 
     private static func parseLive(_ options: [String]) throws -> AK35iCommand {
         var remaining = options[...]
-        guard let name = remaining.popFirst(), ["solid", "breathing", "wave", "starry", "music"].contains(name) else { throw liveUsage }
-        var color: RGBColor?
-        var request = LiveRequest(effect: .wave)
+        let aliases = ["solid": "static", "starry": "starlight"]
+        guard let given = remaining.popFirst() else { throw liveUsage }
+        let name = aliases[given] ?? given
+        let effect: LiveEffect
+        if name == "music" {
+            effect = .music
+        } else if let driver = DriverLightEffect.allCases.first(where: { $0.cliName == name }) {
+            effect = .driver(driver)
+        } else {
+            throw liveUsage
+        }
+        var request = LiveRequest(effect: effect)
+        var colorGiven = false
         var speedGiven = false
         while let option = remaining.popFirst() {
             switch option {
             case "--color":
-                guard name != "wave", name != "music", color == nil, let value = remaining.popFirst(), let rgb = hexColor(value) else { throw liveUsage }
-                color = rgb
+                guard case .driver(let driver) = effect, driver.takesColor, !colorGiven,
+                      let value = remaining.popFirst(), let rgb = hexColor(value) else { throw liveUsage }
+                colorGiven = true
+                request.color = rgb
+                request.colorful = false
             case "--speed":
-                guard name != "solid", name != "music", !speedGiven, let value = remaining.popFirst().flatMap({ Int($0) }),
-                      LiveAnimation.speeds.contains(value) else { throw liveUsage }
+                guard case .driver(let driver) = effect, driver.takesSpeed, !speedGiven,
+                      let value = remaining.popFirst().flatMap({ Int($0) }), LiveAnimation.speeds.contains(value) else { throw liveUsage }
                 speedGiven = true
                 request.speed = value
             case "--seconds":
@@ -366,14 +379,6 @@ enum AK35iCommandParser {
             default:
                 throw liveUsage
             }
-        }
-        let chosen = color ?? RGBColor(red: 0xff, green: 0xff, blue: 0xff)
-        switch name {
-        case "solid": request.effect = .solid(chosen)
-        case "breathing": request.effect = .breathing(chosen)
-        case "starry": request.effect = .starry(chosen)
-        case "music": request.effect = .music
-        default: request.effect = .wave
         }
         return .live(request)
     }

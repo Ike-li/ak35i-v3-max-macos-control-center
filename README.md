@@ -16,7 +16,7 @@
 |---|---|
 | 已验证硬件 | USB VID:PID `0C45:8009` 的 AK35i V3 Max |
 | 已验证写入 | 屏幕时钟：UTC+8 或 Mac 当前时区 |
-| 实验性写入 | 基础灯效：20 种模式及亮度、速度、方向、颜色，控制中心“灯光”页或 `ak35i light set`；自定义单键颜色：“单键灯光”页或 `ak35i keys set Esc=FF0000`；系统设置（禁用 Win / Alt+Tab / Alt+F4、休眠、响应时间、Fn 开关）：“系统设置”页或 `ak35i system set`；改键（普通层与 Fn 层）：“改键”页或 `ak35i keymap set CapsLock=Esc`；宏：“宏”页或 `ak35i macro set "Cmd+Space, 100ms, A"`，再用 `macro:N` 绑定到键；实时灯效与音乐律动（电脑逐帧推送，不写入键盘）：“实时灯效”页或 `ak35i live wave`、`ak35i live music`；屏幕 GIF 页：“屏幕”页或 `ak35i screen set 图片.gif` |
+| 实验性写入 | 基础灯效：20 种模式及亮度、速度、方向、颜色，控制中心“灯光”页或 `ak35i light set`；自定义单键颜色：“单键灯光”页或 `ak35i keys set Esc=FF0000`；系统设置（禁用 Win / Alt+Tab / Alt+F4、休眠、响应时间、Fn 开关）：“系统设置”页或 `ak35i system set`；改键（普通层与 Fn 层）：“改键”页或 `ak35i keymap set CapsLock=Esc`；宏：“宏”页或 `ak35i macro set "Cmd+Space, 100ms, A"`，再用 `macro:N` 绑定到键；实时灯效（Windows 驱动原版的 8 种效果）与音乐律动（电脑逐帧推送，不写入键盘）：“实时灯效”页或 `ak35i live wave`、`ak35i live music`；屏幕 GIF 页：“屏幕”页或 `ak35i screen set 图片.gif` |
 | 连接要求 | USB 有线模式；2.4G 接收器下也能同步时钟、读电量、设置灯效、系统设置、单键颜色、改键、宏、音乐律动（柱状图）和上传屏幕，只有逐键实时灯效和读回单键颜色需要数据线；蓝牙下只能读电量（键盘在蓝牙下不接受设置命令，用接收器或数据线写入的设置切回蓝牙后仍保留） |
 | 支持系统 | 当前发布包为 Apple Silicon (`arm64`)、macOS 13+ |
 | 只读 | 电量：经 2.4G 接收器或蓝牙读取，“电量”页或 `ak35i battery`；有线 USB 下键盘不提供 |
@@ -77,4 +77,4 @@ open "dist/AK35i Control Center.app"
 
 ## 许可与声明
 
-代码以 [MIT License](LICENSE) 发布。型号、商标和第三方材料边界见 [NOTICE.md](NOTICE.md)。本仓库不包含、分发或修改厂商 Windows 驱动、固件、图片、GIF 或源码。
+代码以 [MIT License](LICENSE) 发布。型号、商标和第三方材料边界见 [NOTICE.md](NOTICE.md)。本仓库不包含、分发或修改厂商 Windows 驱动、固件、图片、GIF 或源码；为复现驱动的实时灯效和键位，收录了从驱动中取出的少量数值表和键位数据，详见 NOTICE。

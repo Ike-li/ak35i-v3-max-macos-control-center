@@ -671,56 +671,66 @@ private struct KeymapView: View {
 }
 
 private struct LiveView: View {
-    private enum Choice: String, CaseIterable {
-        case wave = "彩虹波浪"
-        case breathing = "呼吸"
-        case starry = "繁星"
-        case solid = "纯色"
-        case music = "音乐律动"
+    private enum Choice: Hashable {
+        case driver(DriverLightEffect)
+        case music
+
+        static let all = DriverLightEffect.allCases.map(Choice.driver) + [.music]
+
+        var name: String {
+            switch self {
+            case .driver(let effect): return effect.displayName
+            case .music: return "音乐律动"
+            }
+        }
     }
 
     @ObservedObject var model: ControlCenterModel
-    @State private var choice = Choice.wave
-    @State private var color = RGBColor(red: 0x00, green: 0x80, blue: 0xff)
-    @State private var speed = 3
+    @State private var choice = Choice.driver(.rainbowWave)
+    @State private var color = RGBColor(red: 0xff, green: 0, blue: 0)
+    @State private var colorful = true
+    @State private var speed = 15
 
     private var request: LiveRequest {
         switch choice {
-        case .wave: return LiveRequest(effect: .wave, speed: speed)
-        case .breathing: return LiveRequest(effect: .breathing(color), speed: speed)
-        case .starry: return LiveRequest(effect: .starry(color), speed: speed)
-        case .solid: return LiveRequest(effect: .solid(color))
-        case .music: return LiveRequest(effect: .music)
+        case .driver(let effect):
+            return LiveRequest(effect: .driver(effect), color: color, colorful: effect == .fluttering || colorful, speed: speed)
+        case .music:
+            return LiveRequest(effect: .music)
         }
     }
 
     var body: some View {
         Form {
             Section("实时灯效") {
-                Text("由这台 Mac 逐帧推送，键盘不保存；停止或离开本页后，键盘立即恢复原来的灯效。效果由本项目设计，与 Windows 驱动的同名效果不同。")
+                Text("由这台 Mac 逐帧推送，键盘不保存；停止或离开本页后，键盘立即恢复原来的灯效。效果按 Windows 驱动实时灯效页的算法和数据表移植。")
                     .foregroundStyle(.secondary)
                 Picker("效果", selection: $choice) {
-                    ForEach(Choice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(Choice.all, id: \.self) { Text($0.name).tag($0) }
                 }
-                .pickerStyle(.segmented)
                 .disabled(model.isStreaming)
                 if choice == .music {
                     Text("按这台 Mac 正在播放的声音显示频谱：低音在左、高音在右，音量越大亮得越高。需要 macOS 14.2 或更高版本，首次使用会请求系统录音权限；声音不会被录制或保存。")
                         .foregroundStyle(.secondary)
                 }
-                if choice != .wave && choice != .music {
-                    ColorPicker("颜色", selection: Binding(
-                        get: { color.cgColor },
-                        set: { if let picked = RGBColor(cgColor: $0) { color = picked } }
-                    ), supportsOpacity: false)
-                    .disabled(model.isStreaming)
-                }
-                if choice != .solid && choice != .music {
-                    Picker("速度（1 最慢，5 最快）", selection: $speed) {
-                        ForEach(LiveAnimation.speeds, id: \.self) { Text("\($0)").tag($0) }
+                if case .driver(let effect) = choice {
+                    if effect.takesColor {
+                        ColorPicker("颜色", selection: Binding(
+                            get: { color.cgColor },
+                            set: { if let picked = RGBColor(cgColor: $0) { color = picked } }
+                        ), supportsOpacity: false)
+                        .disabled(model.isStreaming)
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(model.isStreaming)
+                    if effect != .staticOn && effect.takesColor {
+                        Toggle("多彩", isOn: $colorful)
+                            .disabled(model.isStreaming)
+                    }
+                    if effect.takesSpeed {
+                        LabeledContent("速度 \(speed)（1 最慢，15 最快）") {
+                            Slider(value: Binding(get: { Double(speed) }, set: { speed = Int($0.rounded()) }), in: 1...15, step: 1)
+                        }
+                        .disabled(model.isStreaming)
+                    }
                 }
                 if model.isStreaming {
                     Button("停止") { model.stopLive() }

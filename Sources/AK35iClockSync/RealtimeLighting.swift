@@ -56,87 +56,52 @@ enum FeatureStreamWriter {
     }
 }
 
-/// Effects drawn on the Mac and streamed frame by frame. They are this
-/// project's own designs; the driver's animations live in mui.dll.
+/// Effects drawn on the Mac and streamed frame by frame.
 enum LiveEffect: Equatable {
-    case solid(RGBColor)
-    case breathing(RGBColor)
-    case wave
-    case starry(RGBColor)
+    /// One of the driver's realtime effects, ported from mui.dll.
+    case driver(DriverLightEffect)
     /// Spectrum bars driven by the Mac's system audio output.
     case music
 }
 
 struct LiveRequest: Equatable {
     var effect: LiveEffect
-    /// 1 (slowest) to 5 (fastest).
-    var speed = 3
+    /// The driver's defaults: red, “colourful” ticked, speed 15.
+    var color = RGBColor(red: 0xff, green: 0, blue: 0)
+    var colorful = true
+    /// 1 (slowest) to 15 (fastest).
+    var speed = 15
     /// Stop after this many seconds; nil streams until interrupted.
     var seconds: Int?
 }
 
 struct LiveAnimation {
-    static let speeds = Array(1...5)
+    static let speeds = Array(1...15)
 
     let request: LiveRequest
-    private var generator: AnyGenerator
-    /// Start time of every twinkling key in the starry effect.
-    private var stars: [UInt8: TimeInterval] = [:]
-    private var lastTime: TimeInterval?
+    private var engine: DriverLightEngine?
+    private var steps = 0
     private let audio: AudioSampleSource?
     private let analyzer = SpectrumAnalyzer()
     private var meter = MusicMeter()
 
-    init(
-        request: LiveRequest,
-        generator: some RandomNumberGenerator = SystemRandomNumberGenerator(),
-        audio: AudioSampleSource? = nil
-    ) {
+    init(request: LiveRequest, audio: AudioSampleSource? = nil) {
         self.request = request
-        self.generator = AnyGenerator(base: generator)
         self.audio = audio
-    }
-
-    /// Seconds per breath, per pass of the rainbow, or per twinkle.
-    static func period(speed: Int) -> TimeInterval {
-        [1: 6.0, 2: 4.5, 3: 3.0, 4: 2.0, 5: 1.2][speed] ?? 3.0
+        if case .driver(let effect) = request.effect {
+            engine = DriverLightEngine(effect: effect, color: request.color, colorful: request.colorful)
+        }
     }
 
     mutating func frame(at time: TimeInterval) -> [UInt8: RGBColor] {
-        let period = Self.period(speed: request.speed)
-        defer { lastTime = time }
-        switch request.effect {
-        case .solid(let color):
-            return Self.fill { _ in color }
-        case .breathing(let color):
-            let level = 0.5 - 0.5 * cos(2 * Double.pi * time / period)
-            return Self.fill { _ in color.scaled(level) }
-        case .wave:
-            let phase = (time / period).truncatingRemainder(dividingBy: 1)
-            return Self.fill { key in
-                let position = (Double(key.x) + Double(key.width) / 2 - 30) / 740
-                var hue = (position - phase).truncatingRemainder(dividingBy: 1)
-                if hue < 0 { hue += 1 }
-                return RGBColor(hue: hue)
-            }
-        case .starry(let color):
-            let elapsed = lastTime.map { max(time - $0, 0) } ?? 0
-            let spawnRate = 24 / period
-            var spawns = Int(spawnRate * elapsed)
-            if Double.random(in: 0..<1, using: &generator) < spawnRate * elapsed - Double(spawns) { spawns += 1 }
-            for _ in 0..<spawns {
-                let key = KeyboardLayout.keys.randomElement(using: &generator)!
-                if stars[key.light] == nil { stars[key.light] = time }
-            }
-            let life = period / 2
-            stars = stars.filter { time - $0.value < life }
-            return Self.fill { key in
-                guard let start = stars[key.light] else { return RGBColor(red: 0, green: 0, blue: 0) }
-                return color.scaled(sin(Double.pi * (time - start) / life))
-            }
-        case .music:
-            return MusicVisualizer.frame(bands: musicBands())
+        guard var engine else { return MusicVisualizer.frame(bands: musicBands()) }
+        let due = Int(time / DriverLightEngine.stepInterval(speed: request.speed))
+        while steps < due {
+            engine.step()
+            steps += 1
         }
+        self.engine = engine
+        return engine.frame
     }
 
     /// Band levels of the latest audio, falling smoothly.
@@ -144,24 +109,9 @@ struct LiveAnimation {
         let (samples, sampleRate) = audio?.latestSamples() ?? ([], 48_000)
         return meter.update(analyzer.bands(samples: samples, sampleRate: sampleRate))
     }
-
-    private static func fill(_ color: (KeyboardKey) -> RGBColor) -> [UInt8: RGBColor] {
-        Dictionary(uniqueKeysWithValues: KeyboardLayout.keys.map { ($0.light, color($0)) })
-    }
-}
-
-private struct AnyGenerator: RandomNumberGenerator {
-    var base: any RandomNumberGenerator
-    mutating func next() -> UInt64 { base.next() }
 }
 
 extension RGBColor {
-    func scaled(_ level: Double) -> RGBColor {
-        let level = min(max(level, 0), 1)
-        func channel(_ value: UInt8) -> UInt8 { UInt8((Double(value) * level).rounded()) }
-        return RGBColor(red: channel(red), green: channel(green), blue: channel(blue))
-    }
-
     /// Fully saturated, full-brightness colour for a hue in 0..<1.
     init(hue: Double) {
         let scaled = hue * 6

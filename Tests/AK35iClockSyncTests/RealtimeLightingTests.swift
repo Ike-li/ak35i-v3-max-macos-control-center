@@ -23,93 +23,55 @@ final class RealtimeLightingTests: XCTestCase {
         XCTAssertEqual(block.firstIndex(of: 123).map { Array(block[$0...$0 + 3]) }, [123, 0, 0, 0xff])
     }
 
-    func testSolidEffectLightsEveryKey() {
-        let blue = RGBColor(red: 0, green: 0, blue: 0xff)
-        var animation = LiveAnimation(request: LiveRequest(effect: .solid(blue)))
+    private let red = RGBColor(red: 0xff, green: 0, blue: 0)
+    private let blue = RGBColor(red: 0, green: 0, blue: 0xff)
+
+    /// The driver steps its effect every (15 − speed) × 16 ms; frames show
+    /// the effect after however many steps are due.
+    func testDriverEffectStepsAtTheSpeedInterval() {
+        var animation = LiveAnimation(request: LiveRequest(effect: .driver(.fountain), speed: 13))
+        var engine = DriverLightEngine(effect: .fountain, color: red, colorful: true)
+
+        XCTAssertEqual(animation.frame(at: 0), engine.frame)
+        for _ in 0..<3 { engine.step() }
+        XCTAssertEqual(animation.frame(at: 0.1), engine.frame, "0.1 s at 32 ms a step is 3 steps")
+        engine.step()
+        XCTAssertEqual(animation.frame(at: 0.13), engine.frame)
+    }
+
+    func testChosenColourWithoutColourfulStaysSingleColour() {
+        var animation = LiveAnimation(request: LiveRequest(effect: .driver(.staticOn), color: blue, colorful: false))
         let frame = animation.frame(at: 1.5)
 
         XCTAssertEqual(frame.count, 104)
-        XCTAssertTrue(frame.values.allSatisfy { $0 == blue })
+        XCTAssertTrue(frame.values.allSatisfy { $0 == RGBColor(red: 0, green: 0, blue: 0xfe) })
     }
 
     func testParsesLiveCommands() throws {
         XCTAssertEqual(
-            try AK35iCommandParser.parse(["live", "solid", "--color", "0000ff", "--seconds", "5"]),
-            .live(LiveRequest(effect: .solid(RGBColor(red: 0, green: 0, blue: 0xff)), seconds: 5))
+            try AK35iCommandParser.parse(["live", "static", "--color", "0000ff", "--seconds", "5"]),
+            .live(LiveRequest(effect: .driver(.staticOn), color: blue, colorful: false, seconds: 5))
         )
         XCTAssertEqual(
-            try AK35iCommandParser.parse(["live", "solid"]),
-            .live(LiveRequest(effect: .solid(RGBColor(red: 0xff, green: 0xff, blue: 0xff))))
+            try AK35iCommandParser.parse(["live", "breathing", "--speed", "5"]),
+            .live(LiveRequest(effect: .driver(.breathing), speed: 5))
         )
-        for arguments in [["live"], ["live", "fireworks"], ["live", "solid", "--seconds", "0"], ["live", "solid", "--color", "blue"]] {
-            XCTAssertThrowsError(try AK35iCommandParser.parse(arguments), "\(arguments)")
-        }
-    }
-
-    private let black = RGBColor(red: 0, green: 0, blue: 0)
-    private let teal = RGBColor(red: 0, green: 0x80, blue: 0xff)
-
-    func testBreathingFadesBetweenDarkAndTheChosenColour() {
-        var animation = LiveAnimation(request: LiveRequest(effect: .breathing(teal), speed: 3))
-        let period = LiveAnimation.period(speed: 3)
-
-        XCTAssertTrue(animation.frame(at: 0).values.allSatisfy { $0 == black })
-        XCTAssertTrue(animation.frame(at: period / 2).values.allSatisfy { $0 == teal })
-        XCTAssertTrue(animation.frame(at: period).values.allSatisfy { $0 == black })
-        let quarter = animation.frame(at: period / 4)[1]!
-        XCTAssertTrue(quarter.blue > 0 && quarter.blue < 0xff)
-        XCTAssertGreaterThan(LiveAnimation.period(speed: 1), LiveAnimation.period(speed: 5))
-    }
-
-    func testWaveMovesARainbowAcrossTheKeyboard() {
-        var animation = LiveAnimation(request: LiveRequest(effect: .wave, speed: 2))
-        let period = LiveAnimation.period(speed: 2)
-        let start = animation.frame(at: 0)
-        let light = { KeyboardLayout.light(named: $0)! }
-
-        XCTAssertEqual(start.count, 104)
-        XCTAssertEqual(start[light("Esc")], start[light("Grave")], "same column, same colour")
-        XCTAssertNotEqual(start[light("Esc")], start[light("NumMinus")])
-        XCTAssertTrue(start.values.allSatisfy { max($0.red, $0.green, $0.blue) == 0xff })
-        XCTAssertNotEqual(animation.frame(at: period / 3), start)
-        XCTAssertEqual(animation.frame(at: period), start)
-    }
-
-    func testStarsTwinkleInTheChosenColour() {
-        var animation = LiveAnimation(request: LiveRequest(effect: .starry(teal)), generator: SeededGenerator(seed: 7))
-        var litCounts: [Int] = []
-        for step in 0..<90 {
-            let frame = animation.frame(at: Double(step) / 30)
-            let lit = frame.values.filter { $0 != black }
-            XCTAssertTrue(lit.allSatisfy { $0.red == 0 && $0.green <= 0x80 && $0.blue > 0 })
-            litCounts.append(lit.count)
-        }
-        XCTAssertGreaterThan(litCounts.max()!, 0)
-        XCTAssertLessThan(litCounts.max()!, 40)
-    }
-
-    func testParsesEveryLiveEffect() throws {
         XCTAssertEqual(
-            try AK35iCommandParser.parse(["live", "breathing", "--color", "0080ff", "--speed", "5"]),
-            .live(LiveRequest(effect: .breathing(teal), speed: 5))
+            try AK35iCommandParser.parse(["live", "wave"]),
+            .live(LiveRequest(effect: .driver(.rainbowWave), color: red, colorful: true, speed: 15)),
+            "driver defaults: red, colourful, fastest"
         )
-        XCTAssertEqual(try AK35iCommandParser.parse(["live", "wave", "--seconds", "10"]), .live(LiveRequest(effect: .wave, seconds: 10)))
-        XCTAssertEqual(try AK35iCommandParser.parse(["live", "starry"]), .live(LiveRequest(effect: .starry(RGBColor(red: 0xff, green: 0xff, blue: 0xff)))))
-        for arguments in [["live", "wave", "--color", "ff0000"], ["live", "starry", "--speed", "6"], ["live", "breathing", "--speed", "0"]] {
+        for effect in DriverLightEffect.allCases {
+            XCTAssertEqual(try AK35iCommandParser.parse(["live", effect.cliName]), .live(LiveRequest(effect: .driver(effect))))
+        }
+        XCTAssertEqual(try AK35iCommandParser.parse(["live", "solid"]), .live(LiveRequest(effect: .driver(.staticOn))))
+        XCTAssertEqual(try AK35iCommandParser.parse(["live", "starry"]), .live(LiveRequest(effect: .driver(.starlight))))
+        for arguments in [
+            ["live"], ["live", "fireworks"], ["live", "static", "--seconds", "0"], ["live", "static", "--color", "blue"],
+            ["live", "static", "--speed", "3"], ["live", "fluttering", "--color", "ff0000"],
+            ["live", "wave", "--speed", "0"], ["live", "wave", "--speed", "16"], ["live", "wave", "--speed", "3", "--speed", "4"],
+        ] {
             XCTAssertThrowsError(try AK35iCommandParser.parse(arguments), "\(arguments)")
         }
-    }
-}
-
-/// Deterministic stand-in for the system random source.
-private struct SeededGenerator: RandomNumberGenerator {
-    var state: UInt64
-    init(seed: UInt64) { state = seed }
-    mutating func next() -> UInt64 {
-        state &+= 0x9e3779b97f4a7c15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xbf58476d1ce4e5b9
-        z = (z ^ (z >> 27)) &* 0x94d049bb133111eb
-        return z ^ (z >> 31)
     }
 }
