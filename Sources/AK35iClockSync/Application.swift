@@ -161,7 +161,9 @@ enum AK35iApplication {
         print("      效果：static 静态恒亮、starlight 繁星点点、fluttering 漫天飞舞、breathing 动态呼吸、")
         print("            fountain 彩泉涌动、wave 多彩纵横、currents 随波逐流、rotating 峰回路转")
         print("      --color RRGGBB 单色（默认多彩；fluttering、music 除外）  --speed 1-15（默认 15 最快；static、music 除外）  --seconds N")
-        print("      music 按 Mac 正在播放的声音显示频谱，需要 macOS 14.2+ 和系统录音权限")
+        print("      music 按 Mac 正在播放的声音做驱动原版的音乐律动，需要 macOS 14.2+ 和系统录音权限：")
+        print("      --foreground 显示模式（默认 gradient 色谱）  --background 背景模式（默认 off 无）  --amplitude 0-100 振幅（默认 60）  --background-brightness 0-100（默认 100）")
+        print("      模式：" + DriverMusicMode.backgrounds.map { "\($0.cliName) \($0.displayName)" }.joined(separator: "、"))
         print("  battery")
         print("      经 2.4G 接收器或蓝牙读取键盘电量（有线 USB 下键盘不提供电量）")
         print("  screen set <图片或 GIF> | --test-pattern [--preview 预览.png] [--apply]")
@@ -478,15 +480,25 @@ enum AK35iApplication {
             let elapsed = frameStart.timeIntervalSince(start)
             if let seconds = request.seconds, elapsed >= TimeInterval(seconds) { break }
             if let audio, !heardAudio { heardAudio = audio.latestSamples().samples.contains { abs($0) > 0.0001 } }
-            let delivered: Bool
-            switch link {
-            case .wired(let transport):
-                delivered = try FeatureStreamWriter.sendFrame(RealtimeFrameProtocol.packets(colors: animation.frame(at: elapsed)), to: transport)
-            case .wireless(let receiver):
-                let packet = MusicBarsProtocol.packet(heights: MusicBarsProtocol.heights(bands: animation.musicBands()))
-                delivered = try receiver.exchange(packet, timeout: 0.1) != nil
+            let colors = animation.frame(at: elapsed)
+            // Like the driver's music page, an all-dark frame is not sent.
+            if request.effect != .music || DriverMusicEngine.hasLight(colors) {
+                let delivered: Bool
+                switch link {
+                case .wired(let transport):
+                    delivered = try FeatureStreamWriter.sendFrame(RealtimeFrameProtocol.packets(colors: colors), to: transport)
+                case .wireless(let receiver):
+                    let music = request.music
+                    let packet = MusicBarsProtocol.packet(
+                        heights: animation.musicHeights(at: elapsed),
+                        foreground: UInt8(music.foreground.rawValue),
+                        background: UInt8(music.background.rawValue),
+                        brightness: UInt8(music.backgroundBrightness)
+                    )
+                    delivered = try receiver.exchange(packet, timeout: 0.1) != nil
+                }
+                if delivered { sent += 1 } else { skipped += 1 }
             }
-            if delivered { sent += 1 } else { skipped += 1 }
             let remaining = liveFrameInterval - Date().timeIntervalSince(frameStart)
             if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
         }

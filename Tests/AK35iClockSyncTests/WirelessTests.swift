@@ -149,18 +149,10 @@ final class WirelessTests: XCTestCase {
         XCTAssertTrue(packet[24..<31].allSatisfy { $0 == 0 })
         XCTAssertEqual(packet[31], checksum(packet))
         XCTAssertEqual(MusicBarsProtocol.packet(heights: Array(repeating: 9, count: 18), foreground: 7, background: 6)[3...6].map { $0 }, [7, 6, 0, 6])
-    }
-
-    func testSpreadsSixteenBandsOverEighteenColumns() {
-        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 1, count: 16)), Array(repeating: 6, count: 18))
-        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0, count: 16)), Array(repeating: 0, count: 18))
-        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0.5, count: 16)), Array(repeating: 3, count: 18))
-        // Half a row of headroom, as on the wired visualiser.
-        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0.07, count: 16)), Array(repeating: 0, count: 18))
-        let bass = MusicBarsProtocol.heights(bands: [1] + Array(repeating: 0, count: 15))
-        XCTAssertEqual(bass.first, 6, "low frequencies on the left")
-        XCTAssertEqual(bass.dropFirst().filter { $0 > 0 }.count, 0)
-        XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0, count: 15) + [1]).last, 6)
+        XCTAssertEqual(
+            MusicBarsProtocol.packet(heights: Array(repeating: 6, count: 22), foreground: 4, background: 6, brightness: 50)[3...6].map { $0 }, [4, 6, 50, 6],
+            "P[5] carries the background brightness, as the driver sends it"
+        )
     }
 
     private func screenFrames(_ count: Int) -> [ScreenFrame] {

@@ -690,14 +690,19 @@ private struct LiveView: View {
     @State private var color = RGBColor(red: 0xff, green: 0, blue: 0)
     @State private var colorful = true
     @State private var speed = 15
+    @State private var music = DriverMusicSettings()
 
     private var request: LiveRequest {
         switch choice {
         case .driver(let effect):
             return LiveRequest(effect: .driver(effect), color: color, colorful: effect == .fluttering || colorful, speed: speed)
         case .music:
-            return LiveRequest(effect: .music)
+            return LiveRequest(effect: .music, music: music)
         }
+    }
+
+    private func percent(_ value: Binding<Int>) -> Binding<Double> {
+        Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
     }
 
     var body: some View {
@@ -710,8 +715,24 @@ private struct LiveView: View {
                 }
                 .disabled(model.isStreaming)
                 if choice == .music {
-                    Text("按这台 Mac 正在播放的声音显示频谱：低音在左、高音在右，音量越大亮得越高。需要 macOS 14.2 或更高版本，首次使用会请求系统录音权限；声音不会被录制或保存。")
+                    Text("按这台 Mac 正在播放的声音，照 Windows 驱动音乐律动页的算法点亮：左边低音、右边高音（约 0–5.4 kHz），越响亮的频段亮得越高，亮起的键用显示模式的颜色，其余用背景。驱动的振幅很灵敏，正常音量下整块键盘都会亮起；想看到起伏就把振幅调低。需要 macOS 14.2 或更高版本，首次使用会请求系统录音权限；声音不会被录制或保存。")
                         .foregroundStyle(.secondary)
+                    Picker("显示模式", selection: $music.foreground) {
+                        ForEach(DriverMusicMode.foregrounds, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .disabled(model.isStreaming)
+                    Picker("背景灯光显示模式", selection: $music.background) {
+                        ForEach(DriverMusicMode.backgrounds, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .disabled(model.isStreaming)
+                    LabeledContent("振幅 \(music.amplitude)") {
+                        Slider(value: percent($music.amplitude), in: 0...100, step: 1)
+                    }
+                    .disabled(model.isStreaming)
+                    LabeledContent("背景亮度 \(music.backgroundBrightness)") {
+                        Slider(value: percent($music.backgroundBrightness), in: 0...100, step: 1)
+                    }
+                    .disabled(model.isStreaming || music.background == .off)
                 }
                 if case .driver(let effect) = choice {
                     if effect.takesColor {
@@ -736,7 +757,7 @@ private struct LiveView: View {
                     Button("停止") { model.stopLive() }
                 } else {
                     if model.snapshot.connection == .wireless && choice != .music {
-                        Text("2.4G 下键盘只支持音乐律动（固定配色的柱状图），其它效果需要用数据线连接。")
+                        Text("2.4G 下键盘只支持音乐律动（柱状图，颜色由键盘固件按所选模式号绘制，与有线不完全相同），其它效果需要用数据线连接。")
                             .foregroundStyle(.secondary)
                     }
                     Button("开始") { model.startLive(request) }

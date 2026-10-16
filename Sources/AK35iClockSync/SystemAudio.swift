@@ -24,6 +24,7 @@ enum SystemAudioError: LocalizedError {
 /// latest window of mono samples is kept for the spectrum.
 @available(macOS 14.2, *)
 final class SystemAudioCapture: AudioSampleSource, @unchecked Sendable {
+    private static let retainedSamples = 2048
     private let lock = NSLock()
     private var samples: [Float] = []
     private var sampleRate = 48_000.0
@@ -119,7 +120,7 @@ final class SystemAudioCapture: AudioSampleSource, @unchecked Sendable {
         let scale = 1 / Float(channels)
         lock.lock()
         samples += mono.map { $0 * scale }
-        if samples.count > SpectrumAnalyzer.windowLength { samples.removeFirst(samples.count - SpectrumAnalyzer.windowLength) }
+        if samples.count > Self.retainedSamples { samples.removeFirst(samples.count - Self.retainedSamples) }
         lock.unlock()
     }
 

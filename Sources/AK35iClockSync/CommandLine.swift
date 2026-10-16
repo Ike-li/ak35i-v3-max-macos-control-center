@@ -341,7 +341,9 @@ enum AK35iCommandParser {
     }
 
     private static let liveUsage = AK35iCommandError.invalidUsage(
-        "用法：ak35i live static|starlight|fluttering|breathing|fountain|wave|currents|rotating|music [--color RRGGBB] [--speed 1-15] [--seconds N]（给颜色即为单色，否则多彩；fluttering、music 不取颜色，static、music 不取速度）"
+        "用法：ak35i live static|starlight|fluttering|breathing|fountain|wave|currents|rotating [--color RRGGBB] [--speed 1-15] [--seconds N]（给颜色即为单色，否则多彩；fluttering 不取颜色，static 不取速度）\n"
+            + "     ak35i live music [--foreground 模式] [--background 模式|off] [--amplitude 0-100] [--background-brightness 0-100] [--seconds N]\n"
+            + "     模式：" + DriverMusicMode.backgrounds.map(\.cliName).joined(separator: "、")
     )
 
     private static func parseLive(_ options: [String]) throws -> AK35iCommand {
@@ -358,24 +360,32 @@ enum AK35iCommandParser {
             throw liveUsage
         }
         var request = LiveRequest(effect: effect)
-        var colorGiven = false
-        var speedGiven = false
+        var seen: Set<String> = []
         while let option = remaining.popFirst() {
+            guard !seen.contains(option) else { throw liveUsage }
+            seen.insert(option)
             switch option {
             case "--color":
-                guard case .driver(let driver) = effect, driver.takesColor, !colorGiven,
+                guard case .driver(let driver) = effect, driver.takesColor,
                       let value = remaining.popFirst(), let rgb = hexColor(value) else { throw liveUsage }
-                colorGiven = true
                 request.color = rgb
                 request.colorful = false
             case "--speed":
-                guard case .driver(let driver) = effect, driver.takesSpeed, !speedGiven,
+                guard case .driver(let driver) = effect, driver.takesSpeed,
                       let value = remaining.popFirst().flatMap({ Int($0) }), LiveAnimation.speeds.contains(value) else { throw liveUsage }
-                speedGiven = true
                 request.speed = value
             case "--seconds":
-                guard request.seconds == nil, let value = remaining.popFirst().flatMap({ Int($0) }), value > 0 else { throw liveUsage }
+                guard let value = remaining.popFirst().flatMap({ Int($0) }), value > 0 else { throw liveUsage }
                 request.seconds = value
+            case "--foreground", "--background":
+                let modes = option == "--foreground" ? DriverMusicMode.foregrounds : DriverMusicMode.backgrounds
+                guard effect == .music, let value = remaining.popFirst(),
+                      let mode = modes.first(where: { $0.cliName == value }) else { throw liveUsage }
+                if option == "--foreground" { request.music.foreground = mode } else { request.music.background = mode }
+            case "--amplitude", "--background-brightness":
+                guard effect == .music, let value = remaining.popFirst().flatMap({ Int($0) }),
+                      DriverMusicSettings.range.contains(value) else { throw liveUsage }
+                if option == "--amplitude" { request.music.amplitude = value } else { request.music.backgroundBrightness = value }
             default:
                 throw liveUsage
             }

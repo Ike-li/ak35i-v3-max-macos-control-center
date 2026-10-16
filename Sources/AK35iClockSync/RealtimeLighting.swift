@@ -60,7 +60,7 @@ enum FeatureStreamWriter {
 enum LiveEffect: Equatable {
     /// One of the driver's realtime effects, ported from mui.dll.
     case driver(DriverLightEffect)
-    /// Spectrum bars driven by the Mac's system audio output.
+    /// The driver's music rhythm on the Mac's system audio output.
     case music
 }
 
@@ -71,6 +71,7 @@ struct LiveRequest: Equatable {
     var colorful = true
     /// 1 (slowest) to 15 (fastest).
     var speed = 15
+    var music = DriverMusicSettings()
     /// Stop after this many seconds; nil streams until interrupted.
     var seconds: Int?
 }
@@ -81,20 +82,21 @@ struct LiveAnimation {
     let request: LiveRequest
     private var engine: DriverLightEngine?
     private var steps = 0
+    private var music: DriverMusicEngine?
     private let audio: AudioSampleSource?
-    private let analyzer = SpectrumAnalyzer()
-    private var meter = MusicMeter()
 
     init(request: LiveRequest, audio: AudioSampleSource? = nil) {
         self.request = request
         self.audio = audio
-        if case .driver(let effect) = request.effect {
-            engine = DriverLightEngine(effect: effect, color: request.color, colorful: request.colorful)
+        switch request.effect {
+        case .driver(let effect): engine = DriverLightEngine(effect: effect, color: request.color, colorful: request.colorful)
+        case .music: music = DriverMusicEngine(settings: request.music)
         }
     }
 
     mutating func frame(at time: TimeInterval) -> [UInt8: RGBColor] {
-        guard var engine else { return MusicVisualizer.frame(bands: musicBands()) }
+        if music != nil { return advanceMusic(to: time).frame }
+        guard var engine else { return [:] }
         let due = Int(time / DriverLightEngine.stepInterval(speed: request.speed))
         while steps < due {
             engine.step()
@@ -104,10 +106,16 @@ struct LiveAnimation {
         return engine.frame
     }
 
-    /// Band levels of the latest audio, falling smoothly.
-    mutating func musicBands() -> [Double] {
-        let (samples, sampleRate) = audio?.latestSamples() ?? ([], 48_000)
-        return meter.update(analyzer.bands(samples: samples, sampleRate: sampleRate))
+    /// Column heights for the 2.4G music frame.
+    mutating func musicHeights(at time: TimeInterval) -> [Int] {
+        advanceMusic(to: time).heights
+    }
+
+    private mutating func advanceMusic(to time: TimeInterval) -> DriverMusicEngine {
+        var music = music ?? DriverMusicEngine(settings: request.music)
+        music.advance(to: time, samples: audio?.latestSamples().samples ?? [])
+        self.music = music
+        return music
     }
 }
 
