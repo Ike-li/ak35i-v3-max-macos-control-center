@@ -24,11 +24,15 @@ struct FeatureSequenceResult: Equatable {
 
 enum FeatureSequenceError: LocalizedError, Equatable {
     case startNotAcknowledged
+    case packetsNotAcknowledged([Int])
 
     var errorDescription: String? {
         switch self {
         case .startNotAcknowledged:
             return "键盘没有确认会话开始命令，已停止，未发送任何设置数据。"
+        case .packetsNotAcknowledged(let indices):
+            let list = indices.map(String.init).joined(separator: "、")
+            return "第 \(list) 个命令未收到键盘确认；会话已按驱动顺序结束。请查看灯效，必要时用 Fn+\\| 切换恢复。"
         }
     }
 }

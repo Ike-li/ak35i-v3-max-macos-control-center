@@ -95,19 +95,21 @@ enum AK35iApplication {
         }
 
         do {
-            let transport = try AK35iHIDClockTransport()
-            let result = try FeatureSequenceWriter.send(packets, to: transport)
-            guard result.unacknowledgedPackets.isEmpty else {
-                let indices = result.unacknowledgedPackets.map(String.init).joined(separator: "、")
-                fputs("第 \(indices) 个命令未收到键盘确认；会话已按驱动顺序结束。请查看灯效，必要时用 Fn+\\| 切换恢复。\n", stderr)
-                return EXIT_FAILURE
-            }
-            print("键盘已确认全部命令。如效果不符，可用 Fn+\\| 切换灯效、Fn+↑/↓ 调亮度恢复。")
+            print(try applyLighting(effect))
             return EXIT_SUCCESS
         } catch {
             fputs("错误：\(error.localizedDescription)\n", stderr)
             return EXIT_FAILURE
         }
+    }
+
+    static func applyLighting(_ effect: LightingEffect) throws -> String {
+        let transport = try AK35iHIDClockTransport()
+        let result = try FeatureSequenceWriter.send(LightingProtocol.packets(for: effect), to: transport)
+        guard result.unacknowledgedPackets.isEmpty else {
+            throw FeatureSequenceError.packetsNotAcknowledged(result.unacknowledgedPackets)
+        }
+        return "已写入灯效「\(effect.mode.displayName)」，键盘已确认全部命令。如效果不符，可用 Fn+\\| 切换灯效、Fn+↑/↓ 调亮度恢复。"
     }
 
     private static func printStatus(json: Bool) -> Int32 {

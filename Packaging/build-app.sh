@@ -16,10 +16,11 @@ fi
 
 cd "${project_dir}"
 swift build -c release --disable-sandbox
+bin_path=$(swift build -c release --disable-sandbox --show-bin-path)
 
 mkdir -p "${staging_path}/Contents/MacOS"
 install -m 644 "${project_dir}/Packaging/Info.plist" "${staging_path}/Contents/Info.plist"
-install -m 755 "${project_dir}/.build/release/ak35i" "${staging_path}/Contents/MacOS/ak35i"
+install -m 755 "${bin_path}/ak35i" "${staging_path}/Contents/MacOS/ak35i"
 
 # Finder metadata invalidates an ad-hoc signature. Clear it before signing so
 # the bundle can be launched normally from Finder or Launch Services.
@@ -38,7 +39,7 @@ if [[ -e "${app_path}" ]]; then
     mv "${app_path}" "${output_dir}/${app_name}.previous-${timestamp}"
 fi
 mv "${staging_path}" "${app_path}"
-cp "${project_dir}/.build/release/ak35i" "${output_dir}/ak35i"
+cp "${bin_path}/ak35i" "${output_dir}/ak35i"
 
 print "已生成：${app_path}"
 print "打开方式：open \"${app_path}\""

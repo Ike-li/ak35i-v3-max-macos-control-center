@@ -161,7 +161,7 @@ struct AK35iDeviceSnapshot: Codable, Equatable {
             return AK35iCapability(
                 feature: feature,
                 state: .experimental,
-                detail: "基础灯效已在此键盘实机验证静态恒亮（设备确认、重连后保留），川流不息目测正常；其余模式按静态逆向发送。目前仅能用 CLI ak35i light set 写入，可用 Fn+\\| 恢复。"
+                detail: "基础灯效已在此键盘实机验证静态恒亮（设备确认、重连后保留），川流不息目测正常；其余模式按静态逆向发送。可在灯光页或用 CLI ak35i light set 写入，可用 Fn+\\| 恢复。"
             )
         case .screenUpload:
             return captureRequired(feature, "已发现 4 KiB 屏幕传输通道，但图片/GIF 格式与提交序列尚未验证。")

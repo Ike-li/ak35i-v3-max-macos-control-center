@@ -37,6 +37,14 @@ final class ControlCenterModel: ObservableObject {
         }
     }
 
+    func applyLighting(_ settings: LightingSettings) {
+        do {
+            message = try AK35iApplication.applyLighting(try settings.effect())
+        } catch {
+            message = "灯效写入失败：\(error.localizedDescription)"
+        }
+    }
+
     func setAutoSync(_ enabled: Bool) {
         do {
             let store = AutoSyncLaunchAgentStore()
@@ -114,7 +122,7 @@ private struct ControlCenterRootView: View {
             case .battery:
                 LockedFeatureView(model: model, feature: .battery)
             case .lighting:
-                LockedFeatureView(model: model, feature: .lighting)
+                LightingView(model: model)
             case .screen:
                 LockedFeatureView(model: model, feature: .screenUpload)
             case .keymap:
@@ -152,7 +160,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("仅已实机验证的时钟同步可以写入。屏幕、RGB、改键与宏将在获得 V3 Max Windows 抓包并通过回放测试后才开放。")
+                Text("已实机验证的时钟同步可以写入；基础灯效为实验性写入。屏幕、用户灯效、改键与宏在取得实机证据前保持锁定。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -200,6 +208,82 @@ private struct ClockView: View {
             Button("同步") { model.syncNow(timeZone: selectedTimeZone) }
         } message: {
             Text("将以 \(selectedTimeZone.displayName) 写入屏幕 RTC。")
+        }
+    }
+}
+
+private struct LightingView: View {
+    @ObservedObject var model: ControlCenterModel
+    @State private var settings = LightingSettings()
+    @State private var confirmsApply = false
+
+    private var capability: AK35iCapability { model.snapshot.capability(.lighting) }
+    private let levels = LightingEffect.levels
+
+    var body: some View {
+        let mode = settings.mode
+        Form {
+            Section("基础灯效") {
+                LabeledContent("协议状态", value: AK35iApplication.capabilityStateName(capability.state))
+                Text(capability.detail).foregroundStyle(.secondary)
+                Picker("灯效", selection: $settings.mode) {
+                    ForEach(LightingMode.allCases, id: \.self) { mode in
+                        Text("\(mode.rawValue)  \(mode.displayName)").tag(mode)
+                    }
+                }
+                if mode.supportsBrightness {
+                    Picker("亮度", selection: $settings.brightness) {
+                        ForEach(levels, id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if mode.supportsSpeed {
+                    Picker("速度", selection: $settings.speed) {
+                        ForEach(levels, id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if let directions = mode.allowedDirections {
+                    Picker("方向", selection: Binding(
+                        get: { directions.contains(settings.direction) ? settings.direction : 0 },
+                        set: { settings.direction = $0 }
+                    )) {
+                        ForEach(directions, id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if mode.supportsColor {
+                    Toggle("多彩", isOn: $settings.colorful)
+                    ColorPicker("颜色", selection: Binding(
+                        get: {
+                            CGColor(
+                                srgbRed: CGFloat(settings.color.red) / 255,
+                                green: CGFloat(settings.color.green) / 255,
+                                blue: CGFloat(settings.color.blue) / 255,
+                                alpha: 1
+                            )
+                        },
+                        set: { if let picked = RGBColor(cgColor: $0) { settings.color = picked } }
+                    ), supportsOpacity: false)
+                    .disabled(settings.colorful)
+                }
+                Button("写入键盘") { confirmsApply = true }
+                    .disabled(capability.state != .experimental)
+            }
+            Section("恢复") {
+                Text("键盘没有灯效读回命令，写入前无法备份当前设置。效果不符时可用 Fn+\\| 切换灯效、Fn+↑/↓ 调亮度、Fn+-/= 调速度。")
+                    .foregroundStyle(.secondary)
+            }
+            Section("状态") { Text(model.message) }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("灯光")
+        .padding()
+        .alert("将灯效写入键盘？", isPresented: $confirmsApply) {
+            Button("取消", role: .cancel) {}
+            Button("写入") { model.applyLighting(settings) }
+        } message: {
+            Text("实验性功能：将写入「\(mode.displayName)」并保存到键盘。")
         }
     }
 }
