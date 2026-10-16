@@ -28,5 +28,7 @@
 	<string>键盘经蓝牙连接时，读取它的标准电池服务来显示电量；不会修改键盘设置。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 AK35i Control Center contributors · MIT License · 非 AJAZZ 官方软件</string>
 </dict>
 </plist>

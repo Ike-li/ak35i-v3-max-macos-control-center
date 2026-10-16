@@ -27,6 +27,11 @@ bin_path=$(swift build -c release --disable-sandbox "${arch_flags[@]}" --show-bi
 mkdir -p "${staging_path}/Contents/MacOS"
 install -m 644 "${project_dir}/Packaging/Info.plist" "${staging_path}/Contents/Info.plist"
 install -m 755 "${bin_path}/ak35i" "${staging_path}/Contents/MacOS/ak35i"
+# MIT asks that the licence travel with every copy; NOTICE states the
+# trademark and vendor-data boundaries.
+mkdir -p "${staging_path}/Contents/Resources"
+install -m 644 "${project_dir}/LICENSE" "${staging_path}/Contents/Resources/LICENSE"
+install -m 644 "${project_dir}/NOTICE.md" "${staging_path}/Contents/Resources/NOTICE.md"
 
 # Finder metadata invalidates an ad-hoc signature. Clear it before signing so
 # the bundle can be launched normally from Finder or Launch Services.
