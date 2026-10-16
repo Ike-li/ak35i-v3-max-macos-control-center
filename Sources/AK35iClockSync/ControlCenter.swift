@@ -30,7 +30,7 @@ final class ControlCenterModel: ObservableObject {
             snapshot = try AK35iApplication.currentSnapshot()
             switch snapshot.connection {
             case .usbWired: message = "已刷新 USB HID 设备状态。"
-            case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量、设置灯效、系统设置、单键颜色、改键、宏和音乐律动；屏幕和其它实时灯效暂时需要用数据线连接并切到 USB 模式。"
+            case .wireless: message = "已连接 2.4G 接收器：可同步时钟、读取电量、设置灯效、系统设置、单键颜色、改键、宏、音乐律动和上传屏幕；波浪等逐键实时灯效需要用数据线连接并切到 USB 模式。"
             case .disconnected: message = "未发现 USB 有线控制接口或 2.4G 接收器。"
             }
         } catch {
@@ -126,21 +126,14 @@ final class ControlCenterModel: ObservableObject {
 
     func uploadScreen(_ frames: [ScreenFrame]) {
         guard screenProgress == nil else { return }
-        let upload: ScreenUpload
-        do {
-            upload = try ScreenProtocol.upload(frames: frames)
-        } catch {
-            message = "屏幕上传失败：\(error.localizedDescription)"
-            return
-        }
         screenProgress = 0
         message = "正在上传屏幕动画…"
-        let total = Double(upload.blocks.count)
         DispatchQueue.global(qos: .userInitiated).async {
             let outcome: String
             do {
-                outcome = try AK35iApplication.uploadScreen(upload) { done in
-                    DispatchQueue.main.async { self.screenProgress = Double(done) / total }
+                outcome = try AK35iApplication.uploadScreen(frames: frames) { done, total in
+                    guard done == total || done % 20 == 0 else { return }
+                    DispatchQueue.main.async { self.screenProgress = Double(done) / Double(total) }
                 }
             } catch {
                 outcome = "屏幕上传失败：\(error.localizedDescription)"
@@ -317,7 +310,7 @@ private struct OverviewView: View {
                 }
             }
             Section("安全策略") {
-                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。2.4G 下目前可同步时钟、设置灯效、系统设置、单键颜色、改键、宏和音乐律动，并只读读取电量。")
+                Text("已实机验证的时钟同步可以写入；基础灯效、单键灯光、系统设置、改键、宏和屏幕 GIF 页为实验性写入；实时灯效只推送显示、不写入键盘。2.4G 下可同步时钟、设置灯效、系统设置、单键颜色、改键、宏、音乐律动和屏幕，并只读读取电量。")
             }
             Section("状态") { Text(model.message) }
         }
@@ -747,6 +740,8 @@ private struct ScreenView: View {
 
     private var capability: AK35iCapability { model.snapshot.capability(.screenUpload) }
     private var blockCount: Int { (try? ScreenProtocol.upload(frames: frames).blocks.count) ?? 0 }
+    /// 2.4G packets of 28 bytes, about 31 ms each with the keyboard's echo (measured).
+    private var wirelessPacketCount: Int { (256 + 64_800 * frames.count + 27) / 28 }
 
     var body: some View {
         Form {
@@ -761,8 +756,14 @@ private struct ScreenView: View {
                         .border(Color.secondary.opacity(0.4))
                     VStack(alignment: .leading, spacing: 6) {
                         Text(sourceName).fontWeight(.medium)
-                        Text("\(frames.count) 帧 · \(blockCount) 块 · 约 \(Int((Double(blockCount) * 0.16).rounded(.up))) 秒")
-                            .foregroundStyle(.secondary)
+                        Group {
+                            if model.snapshot.connection == .wireless {
+                                Text("\(frames.count) 帧 · 经 2.4G \(wirelessPacketCount) 包 · 约 \(Int((Double(wirelessPacketCount) * 0.031).rounded(.up))) 秒")
+                            } else {
+                                Text("\(frames.count) 帧 · \(blockCount) 块 · 约 \(Int((Double(blockCount) * 0.16).rounded(.up))) 秒")
+                            }
+                        }
+                        .foregroundStyle(.secondary)
                         Text("预览为键盘上的实际效果（240×135，RGB565）。").font(.caption).foregroundStyle(.secondary)
                         Text("屏幕是 16:9 横屏，建议用 16:9 的图片（如 1920×1080 或 240×135）铺满；其他比例会等比缩小，空出的部分显示黑边。")
                             .font(.caption).foregroundStyle(.secondary)

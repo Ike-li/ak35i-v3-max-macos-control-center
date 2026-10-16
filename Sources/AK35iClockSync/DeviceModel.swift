@@ -276,6 +276,12 @@ extension AK35iDeviceSnapshot {
                 state: .experimental,
                 detail: "经 2.4G 接收器发 09 宏表（与 Windows 驱动相同），最多 \(MacroProtocol.maxWirelessTableEnd) 字节，已在此键盘实测写入和清空。"
             )
+        case .screenUpload:
+            return AK35iCapability(
+                feature: feature,
+                state: .experimental,
+                detail: "经 2.4G 接收器上传（Windows 驱动的 2.4G 菜单未开放，固件支持），每帧约 2,300 包、约 1 分钟，已在此键盘实测单帧上传。覆盖屏幕 GIF 页，按 Fn+PrtSc 查看。"
+            )
         default:
             return AK35iCapability(
                 feature: feature,

@@ -71,19 +71,33 @@ enum WirelessSender {
     static let replyTimeout: TimeInterval = 1.0
 
     /// Checks that the keyboard answers, then sends every packet and waits for
-    /// its echo. Stops at the first packet without one: the firmware writes
-    /// streamed data without bounds checks, so nothing is sent blindly.
-    static func send(_ packets: [[UInt8]], over receiver: WirelessExchanging, progress: (Int) -> Void = { _ in }) throws {
+    /// its echo. A packet without one is resent up to `retries` times, then
+    /// sending stops: the firmware writes streamed data without bounds checks,
+    /// so nothing is sent blindly. Only screen data passes retries, because
+    /// resending rewrites the same external-flash bytes; settings in the
+    /// controller's own flash are never written twice. Returns the resends.
+    @discardableResult
+    static func send(
+        _ packets: [[UInt8]],
+        over receiver: WirelessExchanging,
+        retries: Int = 0,
+        progress: (Int) -> Void = { _ in }
+    ) throws -> Int {
         guard try receiver.exchange(WirelessProtocol.probe, timeout: replyTimeout) != nil else {
             throw WirelessError.keyboardOffline
         }
+        var resent = 0
         for (index, packet) in packets.enumerated() {
-            guard try receiver.exchange(packet, timeout: replyTimeout) != nil else {
-                throw WirelessError.noReply(packet: index + 1, of: packets.count)
+            var attempts = 0
+            while try receiver.exchange(packet, timeout: replyTimeout) == nil {
+                guard attempts < retries else { throw WirelessError.noReply(packet: index + 1, of: packets.count) }
+                attempts += 1
+                resent += 1
             }
             progress(index + 1)
             Thread.sleep(forTimeInterval: packetDelay)
         }
+        return resent
     }
 }
 

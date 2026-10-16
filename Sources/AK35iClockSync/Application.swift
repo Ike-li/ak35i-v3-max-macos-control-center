@@ -480,8 +480,12 @@ enum AK35iApplication {
                 print("图片有 \(frames.count) 帧，只保留前 \(ScreenProtocol.maxFrames) 帧（与 Windows 驱动相同）。")
                 frames = Array(frames.prefix(ScreenProtocol.maxFrames))
             }
-            let upload = try ScreenProtocol.upload(frames: frames)
-            print("屏幕动画：\(frames.count) 帧，\(upload.blocks.count) 块（每块 4096 字节）。")
+            if isWireless() {
+                let count = try ScreenProtocol.wirelessPackets(frames: frames).count
+                print("屏幕动画：\(frames.count) 帧，经 2.4G 共 \(count) 包（每包 28 字节），预计约 \(Int((Double(count) * 0.031).rounded(.up))) 秒。")
+            } else {
+                print("屏幕动画：\(frames.count) 帧，\(try ScreenProtocol.upload(frames: frames).blocks.count) 块（每块 4096 字节）。")
+            }
             if let preview {
                 try ScreenImage.writePreview(frames[0], to: URL(fileURLWithPath: preview))
                 print("已保存第一帧在键盘上的效果（RGB565）：\(preview)")
@@ -490,8 +494,9 @@ enum AK35iApplication {
                 print("预览完成；未连接或写入键盘。确认写入请加 --apply。写入会覆盖屏幕 GIF 页，键盘无法读回原内容。")
                 return EXIT_SUCCESS
             }
-            print(try uploadScreen(upload) { done in
-                if done == upload.blocks.count || done % 16 == 0 { print("  已写入 \(done)/\(upload.blocks.count) 块") }
+            print(try uploadScreen(frames: frames) { done, total in
+                let step = total > 1_000 ? 500 : 16
+                if done == total || done % step == 0 { print("  已写入 \(done)/\(total)") }
             })
             return EXIT_SUCCESS
         } catch {
@@ -500,7 +505,20 @@ enum AK35iApplication {
         }
     }
 
-    static func uploadScreen(_ upload: ScreenUpload, progress: (Int) -> Void = { _ in }) throws -> String {
+    /// Over the cable, or over 2.4G when only the receiver is there.
+    static func uploadScreen(frames: [ScreenFrame], progress: (_ done: Int, _ total: Int) -> Void = { _, _ in }) throws -> String {
+        if try currentSnapshot().connection == .wireless {
+            let packets = try ScreenProtocol.wirelessPackets(frames: frames)
+            let start = Date()
+            let resent = try WirelessSender.send(packets, over: AK35iReceiverTransport(), retries: 3) { progress($0, packets.count) }
+            let seconds = Int(Date().timeIntervalSince(start).rounded())
+            return "已经 2.4G 接收器上传屏幕动画（\(packets.count) 包，重发 \(resent) 次，用时 \(seconds) 秒），键盘已逐包应答。按 Fn+PrtSc 查看，再按一次返回主页面。"
+        }
+        let upload = try ScreenProtocol.upload(frames: frames)
+        return try uploadScreen(upload) { progress($0, upload.blocks.count) }
+    }
+
+    private static func uploadScreen(_ upload: ScreenUpload, progress: (Int) -> Void) throws -> String {
         let control = try AK35iHIDClockTransport()
         let screen = try AK35iScreenTransport()
         let start = try FeatureSequenceWriter.send(upload.start, to: control)

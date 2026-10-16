@@ -8,10 +8,12 @@ private typealias RGBColor = AK35iClockSync.RGBColor
 private final class FakeReceiver: WirelessExchanging {
     var sent: [[UInt8]] = []
     var silentAt: Int?
+    /// Further silent sends after `silentAt`, to imitate a radio dropping packets.
+    var silentRepeats = 0
 
     func exchange(_ report: [UInt8], timeout: TimeInterval) throws -> [UInt8]? {
         sent.append(report)
-        if sent.count - 1 == silentAt { return nil }
+        if let silentAt, (silentAt...(silentAt + silentRepeats)).contains(sent.count - 1) { return nil }
         return Array(report.prefix(3)) + Array(repeating: 0, count: 29)
     }
 }
@@ -161,13 +163,67 @@ final class WirelessTests: XCTestCase {
         XCTAssertEqual(MusicBarsProtocol.heights(bands: Array(repeating: 0, count: 15) + [1]).last, 6)
     }
 
+    private func screenFrames(_ count: Int) -> [ScreenFrame] {
+        var pixels = Array(repeating: RGBColor(red: 0, green: 0, blue: 0xff), count: ScreenProtocol.width * ScreenProtocol.height)
+        pixels[0] = RGBColor(red: 0xff, green: 0, blue: 0)
+        return Array(repeating: ScreenFrame(pixels: pixels, delay: 100), count: count)
+    }
+
+    /// DeviceDriver.exe 0x4233a0: `7F 03 00 <slot> <N>` then N packets of the
+    /// unpadded image (256 + 64,800 × frames bytes, FF after the end), numbered
+    /// (0x80 + i >> 16, i, i >> 8); firmware 0x6B80 / 0x6C4A write them from 0x950000.
+    func testScreenStreamsTheWiredImageInTwentyEightBytePackets() throws {
+        let packets = try ScreenProtocol.wirelessPackets(frames: screenFrames(1))
+        let length = 256 + 64_800
+        let count = (length + 27) / 28
+        XCTAssertEqual(count, 2324)
+        XCTAssertEqual(packets.count, 1 + count)
+        XCTAssertEqual(Array(packets[0][0...6]), [0x7f, 0x03, 0x00, 0x01, 0x14, 0x09, 0x00])
+        XCTAssertEqual(Array(packets[1][0...2]), [0x80, 0x00, 0x00])
+        XCTAssertEqual(Array(packets[301][0...2]), [0x80, 0x2c, 0x01])
+        XCTAssertEqual(Array(packets[count][0...2]), [0x80, 0x13, 0x09])
+
+        let data = packets.dropFirst().flatMap { $0[3..<31] }
+        let wired = try ScreenProtocol.upload(frames: screenFrames(1)).blocks.flatMap { $0 }
+        XCTAssertEqual(Array(data.prefix(length)), Array(wired.prefix(length)))
+        XCTAssertTrue(data.dropFirst(length).allSatisfy { $0 == 0xff })
+        XCTAssertTrue(packets.allSatisfy { $0[31] == checksum($0) })
+    }
+
+    func testScreenPacketNumbersCarryIntoTheCommandByte() throws {
+        let packets = try ScreenProtocol.wirelessPackets(frames: screenFrames(31))
+        let length: Int = 256 + 64_800 * 31
+        XCTAssertEqual(packets.count, 1 + (length + 27) / 28)
+        XCTAssertEqual(Array(packets[1 + 0x11170][0...2]), [0x81, 0x70, 0x11])
+    }
+
+    /// Only screen data may be resent: the same packet rewrites the same
+    /// external-flash bytes, and a sector start is erased again first.
+    func testResendsAPacketWithoutAnEchoWhenAllowed() throws {
+        let packets = (0..<3).map { WirelessProtocol.packet(0x80, length: UInt8($0), sequence: 0, data: []) }
+        let receiver = FakeReceiver()
+        receiver.silentAt = 2
+        receiver.silentRepeats = 1
+        let resent = try WirelessSender.send(packets, over: receiver, retries: 3)
+        XCTAssertEqual(resent, 2)
+        XCTAssertEqual(receiver.sent, [WirelessProtocol.probe, packets[0], packets[1], packets[1], packets[1], packets[2]])
+
+        let lossy = FakeReceiver()
+        lossy.silentAt = 1
+        lossy.silentRepeats = 3
+        XCTAssertThrowsError(try WirelessSender.send(packets, over: lossy, retries: 3)) { error in
+            XCTAssertEqual(error as? WirelessError, .noReply(packet: 1, of: 3))
+        }
+        XCTAssertEqual(lossy.sent.count, 1 + 4)
+    }
+
     func testReceiverSnapshotOffersOnlyWhatWorksOverTwoPointFourGigahertz() {
         let snapshot = AK35iDeviceSnapshot.wireless
         XCTAssertEqual(snapshot.connection, .wireless)
         for feature in [AK35iFeature.clock, .battery, .lighting, .systemSettings, .perKeyLighting, .keymap, .macros] {
             XCTAssertEqual(snapshot.capability(feature).state, .experimental, "\(feature)")
         }
-        XCTAssertEqual(snapshot.capability(.screenUpload).state, .notConnected)
+        XCTAssertEqual(snapshot.capability(.screenUpload).state, .experimental)
     }
 
     func testWritesNothingWhenTheKeyboardDoesNotAnswer() {
